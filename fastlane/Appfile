@@ -1,0 +1,9 @@
+# Appfile for Citisen
+# Fastlane will read these automatically.
+# See: https://docs.fastlane.tools/advanced/Appfile/
+
+app_identifier("com.yourcompany.citisen")  # <-- change to your bundle id
+apple_id(ENV["APPLE_ID"])                  # read from environment / .env
+team_id("YOUR_TEAM_ID")                    # <-- change to your Apple Developer Team ID
+
+# itc_team_id("YOUR_ITC_TEAM_ID")          # Only needed if you have multiple App Store Connect teams

@@ -1,0 +1,116 @@
+# ==========================================
+# macOS
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# ==========================================
+# Xcode — User-specific
+# ==========================================
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# ==========================================
+# Xcode — Build artifacts
+# ==========================================
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.o
+*.xcarchive
+*.xcresult
+Index.noindex/
+ModuleCache.noindex/
+
+# Legacy / rarely needed
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.perspectivev3
+!default.perspectivev3
+
+# ==========================================
+# Swift Package Manager
+# ==========================================
+.build/
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+# Keep Package.resolved at the app level for reproducibility if you prefer:
+# !/Package.resolved
+
+# ==========================================
+# CocoaPods (only if you ever add it)
+# ==========================================
+Pods/
+# Keep Podfile.lock committed — uncomment the next line if you intend to ignore it:
+# Podfile.lock
+
+# ==========================================
+# Carthage (only if you ever add it)
+# ==========================================
+Carthage/Build/
+Carthage/Checkouts/
+
+# ==========================================
+# Fastlane
+# ==========================================
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+fastlane/README.md
+
+# ==========================================
+# Secrets, API keys, credentials — DO NOT COMMIT
+# ==========================================
+# Apple API key used by fastlane pilot/spaceship
+*.p8
+AuthKey_*.p8
+fastlane/AuthKey_*.p8
+
+# Provisioning & certs
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.p12
+*.pem
+
+# Environment & config files that typically hold secrets
+.env
+.env.*
+!.env.example
+Secrets.swift
+Secrets.xcconfig
+*.secret.xcconfig
+ApiKeys.swift
+ApiKeys.plist
+GoogleService-Info.plist        # remove this line if you use Firebase and accept committing it
+Config/Local.xcconfig
+
+# ==========================================
+# Editors / IDEs
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*~
+.nova/
+
+# ==========================================
+# Logs
+# ==========================================
+*.log

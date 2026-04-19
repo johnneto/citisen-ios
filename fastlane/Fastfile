@@ -1,0 +1,97 @@
+# Fastfile for Citisen
+# Docs: https://docs.fastlane.tools
+#
+# Expected environment variables (set locally in .env or in CI secrets):
+#   APPLE_ID                     - your Apple ID email (for interactive/local runs)
+#   FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD  - app-specific password (local only)
+#
+#   For CI (recommended — App Store Connect API key):
+#     APP_STORE_CONNECT_KEY_ID
+#     APP_STORE_CONNECT_ISSUER_ID
+#     APP_STORE_CONNECT_KEY_CONTENT   (contents of the .p8 file, base64 or raw)
+#
+# Update these constants for your project:
+APP_IDENTIFIER = "com.yourcompany.citisen"        # <-- change to your bundle id
+APPLE_TEAM_ID  = "YOUR_TEAM_ID"                   # <-- change to your Apple Developer Team ID
+XCODE_PROJECT  = "Citisen.xcodeproj"
+XCODE_SCHEME   = "Citisen"
+
+default_platform(:ios)
+
+platform :ios do
+  before_all do
+    # Prepare a temporary keychain on CI so code signing works non-interactively
+    setup_ci if ENV["CI"]
+  end
+
+  desc "Build the app and upload a new beta build to TestFlight (automatic signing)"
+  lane :beta do
+    # ---------------------------------------------------------------
+    # 1. Authenticate with App Store Connect using an API key (CI-safe)
+    # ---------------------------------------------------------------
+    if ENV["APP_STORE_CONNECT_KEY_ID"]
+      app_store_connect_api_key(
+        key_id:      ENV["APP_STORE_CONNECT_KEY_ID"],
+        issuer_id:   ENV["APP_STORE_CONNECT_ISSUER_ID"],
+        key_content: ENV["APP_STORE_CONNECT_KEY_CONTENT"],
+        is_key_content_base64: true,
+        in_house: false
+      )
+    end
+
+    # ---------------------------------------------------------------
+    # 2. Bump the build number (based on TestFlight's latest build)
+    # ---------------------------------------------------------------
+    latest = latest_testflight_build_number(
+      app_identifier: APP_IDENTIFIER,
+      initial_build_number: 0
+    )
+    increment_build_number(
+      xcodeproj: XCODE_PROJECT,
+      build_number: latest + 1
+    )
+
+    # ---------------------------------------------------------------
+    # 3. Build with Xcode automatic signing
+    #    -allowProvisioningUpdates lets Xcode create/update profiles
+    # ---------------------------------------------------------------
+    build_app(
+      project:        XCODE_PROJECT,
+      scheme:         XCODE_SCHEME,
+      configuration:  "Release",
+      clean:          true,
+      export_method:  "app-store",
+      xcargs:         "-allowProvisioningUpdates",
+      export_options: {
+        signingStyle: "automatic",
+        teamID:       APPLE_TEAM_ID
+      },
+      output_directory: "./build",
+      output_name:      "Citisen.ipa"
+    )
+
+    # ---------------------------------------------------------------
+    # 4. Upload to TestFlight
+    # ---------------------------------------------------------------
+    upload_to_testflight(
+      app_identifier:                  APP_IDENTIFIER,
+      skip_waiting_for_build_processing: true,
+      skip_submission:                 true,     # do not submit for review; stays internal
+      changelog: "Automated beta build from fastlane — #{Time.now.strftime('%Y-%m-%d %H:%M')}"
+    )
+
+    # ---------------------------------------------------------------
+    # 5. Commit the bumped build number (optional, skip on CI if desired)
+    # ---------------------------------------------------------------
+    # commit_version_bump(
+    #   xcodeproj: XCODE_PROJECT,
+    #   message: "chore: bump build to #{lane_context[SharedValues::BUILD_NUMBER]} [skip ci]"
+    # )
+
+    UI.success("✅ Uploaded Citisen build to TestFlight")
+  end
+
+  error do |lane, exception|
+    UI.error("Lane #{lane} failed: #{exception.message}")
+  end
+end

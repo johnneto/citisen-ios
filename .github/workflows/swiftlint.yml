@@ -1,0 +1,34 @@
+name: SwiftLint
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Cancel in-progress runs on the same branch when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swiftlint:
+    name: Run SwiftLint
+    # ubuntu is fast and free; SwiftLint has an official Docker image
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/realm/swiftlint:latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show SwiftLint version
+        run: swiftlint version
+
+      - name: Run SwiftLint (strict — warnings fail the build)
+        run: swiftlint lint --strict --reporter github-actions-logging

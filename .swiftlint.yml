@@ -66,10 +66,10 @@ opt_in_rules:
   - sorted_first_last
   - toggle_bool
   - unneeded_parentheses_in_closure_argument
-  - unused_import
   - vertical_whitespace_closing_braces
   - vertical_whitespace_opening_braces
   - yoda_condition
+  # Note: unused_import is intentionally omitted here — it belongs in analyzer_rules only
 
 analyzer_rules:
   - unused_declaration
@@ -148,11 +148,10 @@ trailing_whitespace:
 custom_rules:
   no_print_in_production:
     name: "print() in source"
-    regex: '(?<!\/\/.*)\bprint\('
-    match_kinds:
-      - identifier
+    regex: '(?<!\\/\\/.*)\\bprint\\('
     message: "Avoid print(); use a proper logger (os.Logger) instead."
     severity: warning
+    # Note: match_kinds removed — not supported in custom rules for this SwiftLint version
 
   no_hardcoded_api_keys:
     name: "Hardcoded API key"

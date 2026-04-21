@@ -2,7 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct RootView: View {
-    @Environment(UserPreferencesService.self) private var prefs
+    @Environment(UserPreferencesService.self)
+    private var prefs
 
     var body: some View {
         Group {

@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct LiquidGlassTabBar: View {
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(AppRouter.self) private var router
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(AppRouter.self)
+    private var router
 
     @Namespace private var selectionRingNS
 

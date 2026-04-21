@@ -4,9 +4,12 @@ import SwiftUI
 struct CollectionDetailView: View {
     let collectionId: UUID
 
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppRouter.self) private var router
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext)
+    private var modelContext
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(\.dismiss)
+    private var dismiss
 
     @Query private var collections: [CollectionEntity]
 

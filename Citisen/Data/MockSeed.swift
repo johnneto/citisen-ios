@@ -29,15 +29,27 @@ enum MockSeed {
     }
 
     static let sampleReviews: [Review] = [
-        Review(id: deterministicUUID(from: "review-1"),
-               authorName: "Maarja", rating: 5, daysAgo: 2,
-               text: "Extraordinary — book ahead, the small room fills up fast."),
-        Review(id: deterministicUUID(from: "review-2"),
-               authorName: "Tim", rating: 4, daysAgo: 5,
-               text: "Warm, atmospheric. Service a little slow but worth it."),
-        Review(id: deterministicUUID(from: "review-3"),
-               authorName: "Henrik", rating: 5, daysAgo: 11,
-               text: "Hidden gem — locals know, tourists usually miss it.")
+        Review(
+            id: deterministicUUID(from: "review-1"),
+            authorName: "Maarja",
+            rating: 5,
+            daysAgo: 2,
+            text: "Extraordinary — book ahead, the small room fills up fast."
+        ),
+        Review(
+            id: deterministicUUID(from: "review-2"),
+            authorName: "Tim",
+            rating: 4,
+            daysAgo: 5,
+            text: "Warm, atmospheric. Service a little slow but worth it."
+        ),
+        Review(
+            id: deterministicUUID(from: "review-3"),
+            authorName: "Henrik",
+            rating: 5,
+            daysAgo: 11,
+            text: "Hidden gem — locals know, tourists usually miss it."
+        )
     ]
 
     static let allPlaces: [Place] = {

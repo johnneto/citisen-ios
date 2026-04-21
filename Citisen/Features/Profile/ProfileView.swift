@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct ProfileView: View {
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(CityService.self) private var cityService
-    @Environment(AppRouter.self) private var router
-    @Environment(\.openURL) private var openURL
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(CityService.self)
+    private var cityService
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(\.openURL)
+    private var openURL
 
     @State private var showSignOutConfirm = false
 

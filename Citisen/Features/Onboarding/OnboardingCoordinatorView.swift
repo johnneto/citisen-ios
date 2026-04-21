@@ -2,8 +2,10 @@ import SwiftUI
 import os
 
 struct OnboardingCoordinatorView: View {
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(LocationService.self) private var location
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(LocationService.self)
+    private var location
 
     enum Step {
         case welcome, modes, locationPermission

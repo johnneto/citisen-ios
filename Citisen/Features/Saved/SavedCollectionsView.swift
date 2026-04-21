@@ -2,9 +2,12 @@ import SwiftData
 import SwiftUI
 
 struct SavedCollectionsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppRouter.self) private var router
-    @Environment(CityService.self) private var cityService
+    @Environment(\.modelContext)
+    private var modelContext
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(CityService.self)
+    private var cityService
 
     @Query(sort: \CollectionEntity.createdAt, order: .reverse)
     private var collections: [CollectionEntity]

@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct CitySwitcherSheet: View {
-    @Environment(CityService.self) private var cityService
-    @Environment(AppRouter.self) private var router
-    @Environment(\.dismiss) private var dismiss
+    @Environment(CityService.self)
+    private var cityService
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(\.dismiss)
+    private var dismiss
 
     var body: some View {
         NavigationStack {

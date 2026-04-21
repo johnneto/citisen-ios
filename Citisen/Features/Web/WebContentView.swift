@@ -4,7 +4,8 @@ struct WebContentView: View {
     let title: String
     let url: URL?
 
-    @Environment(\.openURL) private var openURL
+    @Environment(\.openURL)
+    private var openURL
 
     var body: some View {
         Group {

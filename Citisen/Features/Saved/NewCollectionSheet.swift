@@ -2,9 +2,12 @@ import SwiftData
 import SwiftUI
 
 struct NewCollectionSheet: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(CityService.self) private var cityService
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext)
+    private var modelContext
+    @Environment(CityService.self)
+    private var cityService
+    @Environment(\.dismiss)
+    private var dismiss
 
     @State private var name: String = ""
     @State private var iconIndex: Int = 0

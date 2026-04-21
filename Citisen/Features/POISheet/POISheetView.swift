@@ -5,11 +5,16 @@ import SwiftUI
 struct POISheetView: View {
     let place: Place
 
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.openURL) private var openURL
-    @Environment(\.dismiss) private var dismiss
-    @Environment(CityService.self) private var cityService
-    @Environment(AppRouter.self) private var router
+    @Environment(\.modelContext)
+    private var modelContext
+    @Environment(\.openURL)
+    private var openURL
+    @Environment(\.dismiss)
+    private var dismiss
+    @Environment(CityService.self)
+    private var cityService
+    @Environment(AppRouter.self)
+    private var router
 
     @State private var viewModel: POISheetViewModel?
     @State private var showMoreReviewsAlert = false

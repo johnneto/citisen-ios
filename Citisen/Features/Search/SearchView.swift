@@ -1,11 +1,16 @@
 import SwiftUI
 
 struct SearchView: View {
-    @Environment(MockPlacesService.self) private var places
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(CityService.self) private var cityService
-    @Environment(AppRouter.self) private var router
-    @Environment(\.dismiss) private var dismiss
+    @Environment(MockPlacesService.self)
+    private var places
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(CityService.self)
+    private var cityService
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(\.dismiss)
+    private var dismiss
 
     @State private var viewModel: SearchViewModel?
     @FocusState private var isFocused: Bool

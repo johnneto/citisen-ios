@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct MainTabHostView: View {
-    @Environment(AppRouter.self) private var router
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(CityService.self) private var city
-    @Environment(MockPlacesService.self) private var places
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(CityService.self)
+    private var city
+    @Environment(MockPlacesService.self)
+    private var places
 
     var body: some View {
         @Bindable var router = router

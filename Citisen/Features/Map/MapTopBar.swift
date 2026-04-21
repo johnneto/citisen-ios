@@ -7,7 +7,8 @@ struct MapTopBar: View {
     let onTapSearch: () -> Void
     let onTapAvatar: () -> Void
 
-    @Environment(UserPreferencesService.self) private var prefs
+    @Environment(UserPreferencesService.self)
+    private var prefs
 
     var body: some View {
         HStack(spacing: Spacing.sm) {

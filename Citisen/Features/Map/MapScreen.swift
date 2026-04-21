@@ -2,12 +2,18 @@ import MapKit
 import SwiftUI
 
 struct MapScreen: View {
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(LocationService.self) private var locationService
-    @Environment(CityService.self) private var cityService
-    @Environment(MockPlacesService.self) private var places
-    @Environment(AppRouter.self) private var router
-    @Environment(\.openURL) private var openURL
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(LocationService.self)
+    private var locationService
+    @Environment(CityService.self)
+    private var cityService
+    @Environment(MockPlacesService.self)
+    private var places
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(\.openURL)
+    private var openURL
 
     @State private var viewModel: MapViewModel?
 

@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct HamburgerMenuView: View {
-    @Environment(AppRouter.self) private var router
-    @Environment(UserPreferencesService.self) private var prefs
-    @Environment(CityService.self) private var city
-    @Environment(\.openURL) private var openURL
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(UserPreferencesService.self)
+    private var prefs
+    @Environment(CityService.self)
+    private var city
+    @Environment(\.openURL)
+    private var openURL
 
     @State private var showAbout = false
     @State private var showPrivacy = false
@@ -182,22 +186,34 @@ private struct RoundedCorners: Shape {
         path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
         path.addArc(
             center: CGPoint(x: rect.maxX - tr, y: rect.minY + tr),
-            radius: tr, startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false
+            radius: tr,
+            startAngle: .degrees(-90),
+            endAngle: .degrees(0),
+            clockwise: false
         )
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
         path.addArc(
             center: CGPoint(x: rect.maxX - br, y: rect.maxY - br),
-            radius: br, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false
+            radius: br,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
         )
         path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
         path.addArc(
             center: CGPoint(x: rect.minX + bl, y: rect.maxY - bl),
-            radius: bl, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false
+            radius: bl,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: false
         )
         path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
         path.addArc(
             center: CGPoint(x: rect.minX + tl, y: rect.minY + tl),
-            radius: tl, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false
+            radius: tl,
+            startAngle: .degrees(180),
+            endAngle: .degrees(270),
+            clockwise: false
         )
         path.closeSubpath()
         return path

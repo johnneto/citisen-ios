@@ -112,7 +112,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = EFD539BF2F8D8D8300223CD3 /* Build configuration list for PBXNativeTarget "Citisen" */;
 			buildPhases = (
-				EFDCC25D2F955E0A00159491 /* ShellScript */,
+				EFDCC25D2F955E0A00159491 /* Run Script */,
 				EFD5399A2F8D8D8100223CD3 /* Sources */,
 				EFD5399B2F8D8D8100223CD3 /* Frameworks */,
 				EFD5399C2F8D8D8100223CD3 /* Resources */,
@@ -246,7 +246,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		EFDCC25D2F955E0A00159491 /* ShellScript */ = {
+		EFDCC25D2F955E0A00159491 /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -256,13 +256,14 @@
 			);
 			inputPaths = (
 			);
+			name = "Run Script";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if which swiftlint > /dev/null; then\n  swiftlint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
+			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\nif which swiftlint > /dev/null; then\n  swiftlint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -436,6 +437,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F8N4TVUKLF;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Citisen/Info.plist;
@@ -482,6 +484,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F8N4TVUKLF;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Citisen/Info.plist;

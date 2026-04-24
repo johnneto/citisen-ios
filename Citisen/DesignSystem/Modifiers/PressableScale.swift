@@ -11,7 +11,7 @@ struct PressableScaleStyle: ButtonStyle {
             .onChange(of: configuration.isPressed) { _, pressed in
                 guard haptic, pressed else { return }
                 #if canImport(UIKit)
-                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 #endif
             }
     }

@@ -15,8 +15,8 @@ struct LiquidGlassTabBar: View {
             }
         }
         .padding(.horizontal, 4)
-        .frame(height: 68)
-        .liquidGlassPill(strength: .thick)
+        .frame(height: 76)
+        .liquidGlassPill(strength: .thin)
     }
 
     private func tab(for mode: TravelMode, index: Int) -> some View {
@@ -28,13 +28,13 @@ struct LiquidGlassTabBar: View {
         } label: {
             ZStack {
                 if isActive {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
                         .fill(mode.color.opacity(0.13))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            RoundedRectangle(cornerRadius: 34, style: .continuous)
                                 .strokeBorder(mode.color.opacity(0.28), lineWidth: 1)
                         )
-                        .padding(6)
+                        .padding(2)
                         .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
                 }
 

@@ -17,7 +17,7 @@ struct SaveRatingMenu: View {
         }
         .padding(6)
         .frame(minWidth: 240)
-        .liquidGlass(corner: Radius.xl, strength: .thick)
+        .liquidGlass(corner: Radius.xl, strength: .thick, interactive: true)
         .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
     }
 }

@@ -16,7 +16,7 @@ struct LiquidGlassTabBar: View {
         }
         .padding(.horizontal, 4)
         .frame(height: 76)
-        .liquidGlassPill(strength: .thin)
+        .liquidGlassPill(strength: .thin, interactive: true)
     }
 
     private func tab(for mode: TravelMode, index: Int) -> some View {

@@ -50,6 +50,6 @@ struct MapTopBar: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 56)
-        .liquidGlass(corner: 28, strength: .regular)
+        .liquidGlass(corner: 28, strength: .regular, interactive: true)
     }
 }

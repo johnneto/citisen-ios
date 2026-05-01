@@ -269,10 +269,10 @@ struct POISheetView: View {
                             .foregroundStyle(AppColor.textTertiary)
                         Spacer()
                         HStack(spacing: 1) {
-                            ForEach(0..<5, id: \.self) { i in
-                                Image(systemName: i < review.rating ? "star.fill" : "star")
+                            ForEach(0..<5, id: \.self) { starIndex in
+                                Image(systemName: starIndex < review.rating ? "star.fill" : "star")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(i < review.rating ? AppColor.warning : AppColor.textTertiary)
+                                    .foregroundStyle(starIndex < review.rating ? AppColor.warning : AppColor.textTertiary)
                             }
                         }
                     }

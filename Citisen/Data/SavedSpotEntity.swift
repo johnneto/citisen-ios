@@ -3,7 +3,8 @@ import SwiftData
 
 @Model
 final class SavedSpotEntity {
-    @Attribute(.unique) var placeId: UUID
+    @Attribute(.unique)
+    var placeId: UUID
     var placeName: String
     var placeCategory: String
     var modeRaw: String

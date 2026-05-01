@@ -18,7 +18,7 @@ extension City {
     static let tallinn = City(
         id: "tallinn",
         name: "Tallinn",
-        country: "Eesti",
+        country: "Estonia",
         emojiFlag: "🇪🇪",
         center: Coordinate(latitude: 59.4370, longitude: 24.7536),
         defaultSpanKm: 6
@@ -27,7 +27,7 @@ extension City {
     static let tartu = City(
         id: "tartu",
         name: "Tartu",
-        country: "Eesti",
+        country: "Estonia",
         emojiFlag: "🇪🇪",
         center: Coordinate(latitude: 58.3780, longitude: 26.7290),
         defaultSpanKm: 5

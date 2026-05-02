@@ -4,7 +4,7 @@ import SwiftData
 
 @Model
 class SavedPlace {
-    #Index<SavedPlace>([\.countryCode], [\.city], [\.placeType], [\.status])
+    #Index<SavedPlace>([\.countryCode], [\.city], [\.placeTypeRaw], [\.statusRaw])
 
     var id: UUID
     var name: String
@@ -12,9 +12,19 @@ class SavedPlace {
     var longitude: Double
     var countryCode: String?
     var city: String?
-    var status: SavedPlaceStatus
-    var placeType: PlaceType
+    var statusRaw: String
+    var placeTypeRaw: String
     var timestamp: Date
+
+    var status: SavedPlaceStatus {
+        get { SavedPlaceStatus(rawValue: statusRaw) ?? .wantToVisit }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    var placeType: PlaceType {
+        get { PlaceType(rawValue: placeTypeRaw) ?? .other }
+        set { placeTypeRaw = newValue.rawValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -33,8 +43,8 @@ class SavedPlace {
         self.longitude = longitude
         self.countryCode = countryCode
         self.city = city
-        self.status = status
-        self.placeType = placeType
+        self.statusRaw = status.rawValue
+        self.placeTypeRaw = placeType.rawValue
         self.timestamp = timestamp
     }
 

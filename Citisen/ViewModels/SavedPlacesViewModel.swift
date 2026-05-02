@@ -7,7 +7,7 @@ import SwiftUI
 enum GroupingCriterion: String, CaseIterable, Identifiable {
     case country = "Country"
     case city = "City"
-    case placeType = "Place Type"
+    case placeType = "Type"
     case status = "Saved Status"
 
     var id: String { rawValue }
@@ -42,7 +42,10 @@ final class SavedPlacesViewModel {
         let grouped: [String: [SavedPlace]]
         switch selectedGroupingCriterion {
         case .country:
-            grouped = Dictionary(grouping: filtered) { $0.countryCode ?? "Unknown Country" }
+            grouped = Dictionary(grouping: filtered) { place in
+                guard let code = place.countryCode else { return "Unknown Country" }
+                return Locale.current.localizedString(forRegionCode: code) ?? code
+            }
         case .city:
             grouped = Dictionary(grouping: filtered) { $0.city ?? "Unknown City" }
         case .placeType:

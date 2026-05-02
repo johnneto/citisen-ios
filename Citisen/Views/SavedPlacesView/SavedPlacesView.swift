@@ -32,36 +32,33 @@ struct SavedPlacesView: View {
     @ViewBuilder
     private func content(_ vm: SavedPlacesViewModel) -> some View {
         @Bindable var vm = vm
-        NavigationStack {
-            VStack(spacing: 0) {
-                FilterBarView(viewModel: vm)
-                    .padding(.vertical, Spacing.xs)
-                Divider()
-                SavedPlacesList(
-                    viewModel: vm,
-                    sections: vm.groupedSections(from: allSavedPlaces)
-                )
-            }
-            .background(AppColor.surfacePrimary.ignoresSafeArea())
-            .navigationTitle("Saved")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Add Place", systemImage: "plus") {
-                        showingAddPlaceSheet = true
-                    }
-                    .tint(BrandColor.sand)
+        VStack(spacing: 0) {
+            FilterBarView(viewModel: vm)
+            Divider()
+            SavedPlacesList(
+                viewModel: vm,
+                sections: vm.groupedSections(from: allSavedPlaces)
+            )
+        }
+        .background(AppColor.surfacePrimary.ignoresSafeArea())
+        .navigationTitle("Saved")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Add Place", systemImage: "plus") {
+                    showingAddPlaceSheet = true
                 }
+                .tint(BrandColor.sand)
             }
-            .sheet(isPresented: $showingAddPlaceSheet) {
-                AddPlaceSheet(
-                    viewModel: vm,
-                    locationService: locationService,
-                    isPresented: $showingAddPlaceSheet
-                )
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-            }
+        }
+        .sheet(isPresented: $showingAddPlaceSheet) {
+            AddPlaceSheet(
+                viewModel: vm,
+                locationService: locationService,
+                isPresented: $showingAddPlaceSheet
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
     }
 }
@@ -167,7 +164,7 @@ struct AddPlaceSheet: View {
                     .keyboardType(.decimalPad)
                 TextField("Longitude", text: $longitude)
                     .keyboardType(.decimalPad)
-                Picker("Place Type", selection: $selectedPlaceType) {
+                Picker("Type", selection: $selectedPlaceType) {
                     ForEach(PlaceType.allCases) { type in
                         Text(type.rawValue).tag(type)
                     }

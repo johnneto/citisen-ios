@@ -4,34 +4,28 @@ struct FilterBarView: View {
     @Bindable var viewModel: SavedPlacesViewModel
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Spacing.xs) {
-                ForEach(GroupingCriterion.allCases) { criterion in
-                    Button {
+        HStack(spacing: 0) {
+            ForEach(GroupingCriterion.allCases) { criterion in
+                let isSelected = viewModel.selectedGroupingCriterion == criterion
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         viewModel.selectedGroupingCriterion = criterion
-                    } label: {
+                    }
+                } label: {
+                    VStack(spacing: 0) {
                         Text(criterion.rawValue)
-                            .font(.subheadline)
-                            .bold(viewModel.selectedGroupingCriterion == criterion)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(
-                                viewModel.selectedGroupingCriterion == criterion
-                                    ? BrandColor.sand
-                                    : AppColor.surfaceGrouped
-                            )
-                            .foregroundStyle(
-                                viewModel.selectedGroupingCriterion == criterion
-                                    ? Color.white
-                                    : AppColor.textPrimary
-                            )
-                            .clipShape(.rect(cornerRadius: Radius.md))
+                            .font(.caption.weight(isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? AppColor.textPrimary : AppColor.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+
+                        Rectangle()
+                            .fill(isSelected ? BrandColor.sand : Color.clear)
+                            .frame(height: 2)
                     }
                 }
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.selectedGroupingCriterion)
             }
-            .padding(.horizontal, Spacing.lg)
         }
-        .scrollIndicators(.hidden)
-        .frame(height: 44)
     }
 }

@@ -41,8 +41,7 @@ struct SearchView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    @ViewBuilder private var content: some View {
         if let viewModel {
             VStack(spacing: 0) {
                 searchField(viewModel)
@@ -145,25 +144,7 @@ struct SearchView: View {
                     .padding(.top, Spacing.lg)
                     .padding(.bottom, Spacing.xs)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(["Old Town", "Cafés", "Viewpoints", "Sauna", "Markets"], id: \.self) { term in
-                            Button {
-                                vm.applyRecent(term)
-                            } label: {
-                                Text(term)
-                                    .font(.footnote13.weight(.medium))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(BrandColor.sandTint)
-                                    .foregroundStyle(BrandColor.sandDeep)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.pressableScale)
-                        }
-                    }
-                    .padding(.horizontal, Spacing.lg)
-                }
+                TrySuggestionsRow { term in vm.applyRecent(term) }
             }
         }
     }
@@ -242,5 +223,34 @@ struct SearchView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct TrySuggestionsRow: View {
+    let onSelect: (String) -> Void
+
+    private let suggestions = ["Old Town", "Cafés", "Viewpoints", "Sauna", "Markets"]
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(suggestions, id: \.self) { term in
+                    Button {
+                        onSelect(term)
+                    } label: {
+                        Text(term)
+                            .font(.footnote13.weight(.medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(BrandColor.sandTint)
+                            .foregroundStyle(BrandColor.sandDeep)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.pressableScale)
+                }
+            }
+            .padding(.horizontal, Spacing.lg)
+        }
+        .scrollIndicators(.hidden)
     }
 }

@@ -9,6 +9,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     var lastError: String?
 
     private let manager: CLLocationManager
+    private let geocoder = CLGeocoder()
 
     override init() {
         self.manager = CLLocationManager()
@@ -20,6 +21,12 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
 
     func requestWhenInUse() {
         manager.requestWhenInUseAuthorization()
+    }
+
+    func reverseGeocode(location: CLLocation) async throws -> (countryCode: String?, city: String?) {
+        let placemarks = try await geocoder.reverseGeocodeLocation(location)
+        let placemark = placemarks.first
+        return (placemark?.isoCountryCode, placemark?.locality)
     }
 
     func startUpdating() {

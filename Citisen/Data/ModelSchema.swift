@@ -5,7 +5,7 @@ import SwiftData
 enum AppModelSchema {
     static let models: [any PersistentModel.Type] = [
         SavedSpotEntity.self,
-        CollectionEntity.self
+        SavedPlace.self
     ]
 
     @MainActor
@@ -29,19 +29,6 @@ enum AppModelSchema {
 
     @MainActor
     private static func seedIfNeeded(_ context: ModelContext) {
-        let descriptor = FetchDescriptor<CollectionEntity>()
-        let existing = (try? context.fetchCount(descriptor)) ?? 0
-        guard existing == 0 else { return }
-
-        let seed = CollectionEntity(
-            name: "Tallinn Favourites",
-            cityId: City.tallinn.id,
-            cityName: City.tallinn.name,
-            countryName: City.tallinn.country,
-            colorHexes: ["C8975A", "4A8C6F", "5B6BF0"],
-            iconSymbol: "heart.fill"
-        )
-        context.insert(seed)
-        try? context.save()
+        // No seed data required for the current schema.
     }
 }

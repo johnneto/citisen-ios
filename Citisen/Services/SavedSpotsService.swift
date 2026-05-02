@@ -27,8 +27,10 @@ final class SavedSpotsService {
         if let existing = spot(for: place.id) {
             if existing.rating == rating {
                 context.delete(existing)
+                deleteMirroredPlace(for: place.id)
             } else {
                 existing.ratingRaw = rating.rawValue
+                updateMirroredPlace(for: place.id, rating: rating)
             }
         } else {
             let entity = SavedSpotEntity(
@@ -40,6 +42,7 @@ final class SavedSpotsService {
                 cityId: place.cityId
             )
             context.insert(entity)
+            insertMirroredPlace(for: place, rating: rating)
         }
         try? context.save()
     }
@@ -47,6 +50,7 @@ final class SavedSpotsService {
     func unsave(placeId: UUID) {
         guard let existing = spot(for: placeId) else { return }
         context.delete(existing)
+        deleteMirroredPlace(for: placeId)
         try? context.save()
     }
 
@@ -57,52 +61,55 @@ final class SavedSpotsService {
         return (try? context.fetch(descriptor)) ?? []
     }
 
-    // MARK: - Collections
+    // MARK: - SavedPlace mirror
 
-    func allCollections() -> [CollectionEntity] {
-        let descriptor = FetchDescriptor<CollectionEntity>(
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+    private func mirroredPlace(for placeId: UUID) -> SavedPlace? {
+        var descriptor = FetchDescriptor<SavedPlace>(
+            predicate: #Predicate { $0.id == placeId }
         )
-        return (try? context.fetch(descriptor)) ?? []
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
     }
 
-    @discardableResult
-    func createCollection(
-        name: String,
-        city: City,
-        colorHexes: [String] = ["C8975A", "D4695E", "4A8C6F"],
-        iconSymbol: String = "bookmark.fill"
-    ) -> CollectionEntity {
-        let entity = CollectionEntity(
-            name: name,
-            cityId: city.id,
-            cityName: city.name,
-            countryName: city.country,
-            colorHexes: colorHexes,
-            iconSymbol: iconSymbol
+    private func insertMirroredPlace(for place: Place, rating: SavedSpotRating) {
+        let saved = SavedPlace(
+            id: place.id,
+            name: place.name,
+            latitude: place.coordinate.latitude,
+            longitude: place.coordinate.longitude,
+            status: savedPlaceStatus(from: rating),
+            placeType: placeType(from: place.category)
         )
-        context.insert(entity)
-        try? context.save()
-        return entity
+        context.insert(saved)
     }
 
-    func delete(_ collection: CollectionEntity) {
-        context.delete(collection)
-        try? context.save()
+    private func updateMirroredPlace(for placeId: UUID, rating: SavedSpotRating) {
+        guard let existing = mirroredPlace(for: placeId) else { return }
+        existing.status = savedPlaceStatus(from: rating)
     }
 
-    func rename(_ collection: CollectionEntity, to name: String) {
-        collection.name = name
-        try? context.save()
+    private func deleteMirroredPlace(for placeId: UUID) {
+        guard let existing = mirroredPlace(for: placeId) else { return }
+        context.delete(existing)
     }
 
-    func addSpot(_ spot: SavedSpotEntity, to collection: CollectionEntity) {
-        spot.collection = collection
-        try? context.save()
+    private func savedPlaceStatus(from rating: SavedSpotRating) -> SavedPlaceStatus {
+        switch rating {
+        case .wantToVisit: return .wantToVisit
+        case .betterThanExpected, .good: return .good
+        case .skippable, .dontGo: return .dontGo
+        }
     }
 
-    func removeSpot(_ spot: SavedSpotEntity) {
-        context.delete(spot)
-        try? context.save()
+    private func placeType(from category: String) -> PlaceType {
+        let lower = category.lowercased()
+        if lower.contains("cafe") || lower.contains("coffee") { return .cafe }
+        if lower.contains("restaurant") || lower.contains("food") { return .restaurant }
+        if lower.contains("museum") { return .museum }
+        if lower.contains("hotel") || lower.contains("accommodation") { return .hotel }
+        if lower.contains("park") || lower.contains("garden") { return .park }
+        if lower.contains("landmark") || lower.contains("attraction") { return .landmark }
+        if lower.contains("shopping") || lower.contains("store") || lower.contains("market") { return .shopping }
+        return .other
     }
 }

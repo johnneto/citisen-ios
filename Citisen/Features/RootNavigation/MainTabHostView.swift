@@ -39,9 +39,7 @@ struct MainTabHostView: View {
         case .profile:
             ProfileView()
         case .saved:
-            SavedCollectionsView()
-        case .collectionDetail(let id):
-            CollectionDetailView(collectionId: id)
+            SavedPlacesView()
         case .about:
             WebContentView(
                 title: "About Citisen",
@@ -66,10 +64,6 @@ struct MainTabHostView: View {
                 .presentationDragIndicator(.visible)
         case .modePicker(let slotIndex):
             modePickerSheet(slotIndex: slotIndex)
-        case .newCollection:
-            NewCollectionSheet()
-                .presentationDetents([.height(420)])
-                .presentationDragIndicator(.visible)
         case .poi(let placeId):
             poiSheet(for: placeId)
         }

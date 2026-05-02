@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import os
 import SwiftData
 import SwiftUI
 

@@ -2,8 +2,10 @@ import SwiftData
 import SwiftUI
 
 struct SavedPlacesView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(LocationService.self) private var locationService
+    @Environment(\.modelContext)
+    private var modelContext
+    @Environment(LocationService.self)
+    private var locationService
 
     @Query(sort: \SavedPlace.timestamp, order: .reverse)
     private var allSavedPlaces: [SavedPlace]
@@ -34,70 +36,10 @@ struct SavedPlacesView: View {
             VStack(spacing: 0) {
                 FilterBarView(viewModel: vm)
                     .padding(.vertical, Spacing.xs)
-
                 Divider()
-
-                List {
-                    let sections = vm.groupedSections(from: allSavedPlaces)
-                    if sections.isEmpty {
-                        if vm.searchText.isEmpty {
-                            ContentUnavailableView(
-                                "No Saved Places",
-                                systemImage: "bookmark",
-                                description: Text("Tap + to save your first place.")
-                            )
-                            .listRowBackground(Color.clear)
-                        } else {
-                            ContentUnavailableView.search(text: vm.searchText)
-                                .listRowBackground(Color.clear)
-                        }
-                    } else {
-                        ForEach(sections) { section in
-                            Section {
-                                ForEach(section.items) { place in
-                                    SavedPlaceRowView(place: place)
-                                        .swipeActions(edge: .trailing) {
-                                            Button(role: .destructive) {
-                                                vm.delete(place)
-                                            } label: {
-                                                Label("Delete", systemImage: "trash")
-                                            }
-                                        }
-                                        .contextMenu {
-                                            ForEach(SavedPlaceStatus.allCases) { status in
-                                                Button {
-                                                    vm.updateStatus(of: place, to: status)
-                                                } label: {
-                                                    Label(
-                                                        status.rawValue,
-                                                        systemImage: place.status == status
-                                                            ? "checkmark.circle.fill"
-                                                            : "circle"
-                                                    )
-                                                }
-                                            }
-                                        }
-                                }
-                            } header: {
-                                HStack(spacing: 4) {
-                                    if vm.selectedGroupingCriterion == .country,
-                                       let code = section.items.first?.countryCode {
-                                        Text(code.flagEmoji())
-                                    }
-                                    Text(section.header)
-                                }
-                                .font(.footnote13.weight(.semibold))
-                                .foregroundStyle(AppColor.textSecondary)
-                                .textCase(nil)
-                            }
-                        }
-                    }
-                }
-                .listStyle(.plain)
-                .background(AppColor.surfacePrimary)
-                .searchable(
-                    text: $vm.searchText,
-                    placement: .navigationBarDrawer(displayMode: .always)
+                SavedPlacesList(
+                    viewModel: vm,
+                    sections: vm.groupedSections(from: allSavedPlaces)
                 )
             }
             .background(AppColor.surfacePrimary.ignoresSafeArea())
@@ -112,11 +54,97 @@ struct SavedPlacesView: View {
                 }
             }
             .sheet(isPresented: $showingAddPlaceSheet) {
-                AddPlaceSheet(viewModel: vm, locationService: locationService, isPresented: $showingAddPlaceSheet)
-                    .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
+                AddPlaceSheet(
+                    viewModel: vm,
+                    locationService: locationService,
+                    isPresented: $showingAddPlaceSheet
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
             }
         }
+    }
+}
+
+private struct SavedPlacesList: View {
+    @Bindable var viewModel: SavedPlacesViewModel
+    let sections: [GroupedSection]
+
+    var body: some View {
+        List {
+            if sections.isEmpty {
+                emptyState
+            } else {
+                ForEach(sections) { section in
+                    Section {
+                        placeRows(in: section)
+                    } header: {
+                        sectionHeader(for: section)
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .background(AppColor.surfacePrimary)
+        .searchable(
+            text: $viewModel.searchText,
+            placement: .navigationBarDrawer(displayMode: .always)
+        )
+    }
+
+    @ViewBuilder private var emptyState: some View {
+        if viewModel.searchText.isEmpty {
+            ContentUnavailableView(
+                "No Saved Places",
+                systemImage: "bookmark",
+                description: Text("Tap + to save your first place.")
+            )
+            .listRowBackground(Color.clear)
+        } else {
+            ContentUnavailableView.search(text: viewModel.searchText)
+                .listRowBackground(Color.clear)
+        }
+    }
+
+    @ViewBuilder
+    private func placeRows(in section: GroupedSection) -> some View {
+        ForEach(section.items) { place in
+            SavedPlaceRowView(place: place)
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        viewModel.delete(place)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .contextMenu {
+                    ForEach(SavedPlaceStatus.allCases) { status in
+                        Button {
+                            viewModel.updateStatus(of: place, to: status)
+                        } label: {
+                            Label(
+                                status.rawValue,
+                                systemImage: place.status == status
+                                    ? "checkmark.circle.fill"
+                                    : "circle"
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    private func sectionHeader(for section: GroupedSection) -> some View {
+        HStack(spacing: 4) {
+            if viewModel.selectedGroupingCriterion == .country,
+               let code = section.items.first?.countryCode {
+                Text(code.flagEmoji())
+            }
+            Text(section.header)
+        }
+        .font(.footnote13.weight(.semibold))
+        .foregroundStyle(AppColor.textSecondary)
+        .textCase(nil)
     }
 }
 

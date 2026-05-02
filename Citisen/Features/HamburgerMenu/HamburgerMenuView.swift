@@ -69,10 +69,6 @@ struct HamburgerMenuView: View {
                         router.closeHamburger()
                         router.push(.saved)
                     }
-                    row("map", "Collections") {
-                        router.closeHamburger()
-                        router.push(.saved)
-                    }
                     row("mappin.circle", "Change city") {
                         router.closeHamburger()
                         router.present(.citySwitcher)

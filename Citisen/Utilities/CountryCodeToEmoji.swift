@@ -4,11 +4,12 @@ extension String {
     func flagEmoji() -> String {
         guard isCountryCode else { return "" }
         let base: UInt32 = 0x1F1E6
-        var s = ""
-        for v in unicodeScalars {
-            s.unicodeScalars.append(UnicodeScalar(base + v.value - 0x41)!)
+        var flag = ""
+        for scalar in unicodeScalars {
+            guard let regionalScalar = UnicodeScalar(base + scalar.value - 0x41) else { continue }
+            flag.unicodeScalars.append(regionalScalar)
         }
-        return s
+        return flag
     }
 
     var isCountryCode: Bool {

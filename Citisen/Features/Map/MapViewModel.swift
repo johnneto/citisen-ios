@@ -6,22 +6,36 @@ import SwiftUI
 @Observable
 @MainActor
 final class MapViewModel {
+    enum Phase: Equatable {
+        case idle
+        case loading
+        case loaded
+        case error(String)
+    }
+
     var cameraPosition: MapCameraPosition
     var activeSubFilters: Set<SubFilter> = []
     var shouldShowLocationDeniedSettings: Bool = false
 
-    let places: MockPlacesService
+    private(set) var places: [Place] = []
+    private(set) var phase: Phase = .idle
+    private(set) var lastFetchCenter: CLLocationCoordinate2D?
+    var visibleRegion: MKCoordinateRegion?
+
+    let placesService: PlacesService
     let prefs: UserPreferencesService
     let cityService: CityService
     let locationService: LocationService
 
+    private var loadTask: Task<Void, Never>?
+
     init(
-        places: MockPlacesService,
+        places: PlacesService,
         prefs: UserPreferencesService,
         cityService: CityService,
         locationService: LocationService
     ) {
-        self.places = places
+        self.placesService = places
         self.prefs = prefs
         self.cityService = cityService
         self.locationService = locationService
@@ -36,12 +50,42 @@ final class MapViewModel {
         ))
     }
 
-    func currentPlaces() -> [Place] {
-        places.places(
-            city: cityService.activeCity,
-            mode: prefs.activeMode,
-            subFilters: activeSubFilters
-        )
+    func filteredPlaces() -> [Place] {
+        places.filter { place in
+            activeSubFilters.allSatisfy { $0.matches(place) }
+        }
+    }
+
+    func reload(forceRefresh: Bool = false) {
+        loadTask?.cancel()
+        let city = cityService.activeCity
+        let mode = prefs.activeMode
+        let viewport = currentViewport(for: city)
+
+        phase = .loading
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await self.placesService.loadSpots(
+                    city: city,
+                    mode: mode,
+                    viewport: viewport,
+                    forceRefresh: forceRefresh
+                )
+                if Task.isCancelled { return }
+                self.places = result
+                self.phase = .loaded
+                self.lastFetchCenter = viewport.center
+            } catch is CancellationError {
+                return
+            } catch let spotsError as SpotsError {
+                if Task.isCancelled { return }
+                self.phase = .error(spotsError.errorDescription ?? "Couldn't load spots.")
+            } catch {
+                if Task.isCancelled { return }
+                self.phase = .error(error.localizedDescription)
+            }
+        }
     }
 
     func toggleSubFilter(_ filter: SubFilter) {
@@ -83,5 +127,24 @@ final class MapViewModel {
                 longitudeDelta: city.defaultSpanKm / 111
             )
         ))
+    }
+
+    func shouldOfferSearchThisArea() -> Bool {
+        guard let region = visibleRegion, let last = lastFetchCenter else { return false }
+        let distance = CLLocation(latitude: region.center.latitude, longitude: region.center.longitude)
+            .distance(from: CLLocation(latitude: last.latitude, longitude: last.longitude))
+        return distance > AppConfig.Spots.searchAreaTriggerMeters
+    }
+
+    private func currentViewport(for city: City) -> Viewport {
+        if let region = visibleRegion {
+            return Viewport(region: region)
+        }
+        let delta = city.defaultSpanKm / 111
+        return Viewport(
+            center: city.center.clLocation,
+            latitudeDelta: delta,
+            longitudeDelta: delta
+        )
     }
 }

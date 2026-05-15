@@ -2,209 +2,329 @@ import SwiftData
 import SwiftUI
 
 struct SavedCollectionsView: View {
-    @Environment(\.modelContext)
-    private var modelContext
     @Environment(AppRouter.self)
     private var router
-    @Environment(CityService.self)
-    private var cityService
-
-    @Query(sort: \CollectionEntity.createdAt, order: .reverse)
-    private var collections: [CollectionEntity]
 
     @Query(sort: \SavedSpotEntity.savedAt, order: .reverse)
     private var allSpots: [SavedSpotEntity]
 
-    @State private var selectedTab: Tab = .collections
+    @State private var grouping: PlacesGrouping = .country
 
-    enum Tab: Hashable { case collections, spots }
+    enum PlacesGrouping: String, CaseIterable, Hashable {
+        case country = "Country"
+        case city = "City"
+        case type = "Type"
+        case all = "All"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            segmented
+            groupingPicker
                 .padding(.horizontal, Spacing.lg)
                 .padding(.top, Spacing.sm)
 
-            if selectedTab == .collections {
-                collectionsGrid
+            if allSpots.isEmpty {
+                emptySpotsState
             } else {
-                spotsList
+                switch grouping {
+                case .country: countryGroupList
+                case .city:    cityGroupList
+                case .type:    typeGroupList
+                case .all:     allSpotsList
+                }
             }
         }
         .background(AppColor.surfacePrimary.ignoresSafeArea())
         .navigationTitle("Saved")
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    router.present(.newCollection)
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .tint(BrandColor.sand)
-                .accessibilityLabel("New collection")
-            }
-        }
     }
 
-    private var segmented: some View {
+    // MARK: - Grouping picker
+
+    private var groupingPicker: some View {
         HStack(spacing: 0) {
-            segmentButton("Collections", tab: .collections)
-            segmentButton("All spots", tab: .spots)
+            ForEach(PlacesGrouping.allCases, id: \.self) { option in
+                groupingButton(option)
+            }
         }
         .padding(4)
         .background(AppColor.surfaceGrouped)
         .clipShape(Capsule())
     }
 
-    private func segmentButton(_ label: String, tab: Tab) -> some View {
+    private func groupingButton(_ option: PlacesGrouping) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab }
+            withAnimation(.easeInOut(duration: 0.2)) { grouping = option }
         } label: {
-            Text(label)
+            Text(option.rawValue)
                 .font(.subheadline15.weight(.semibold))
-                .foregroundStyle(selectedTab == tab ? AppColor.textPrimary : AppColor.textSecondary)
+                .foregroundStyle(grouping == option ? AppColor.textPrimary : AppColor.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                .background(selectedTab == tab ? AppColor.surfaceElevated : .clear)
+                .background(grouping == option ? AppColor.surfaceElevated : .clear)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private var collectionsGrid: some View {
-        if collections.isEmpty {
-            emptyCollections
-        } else {
-            ScrollView {
-                LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                    spacing: 12
-                ) {
-                    ForEach(collections) { collection in
-                        Button {
-                            router.push(.collectionDetail(collection.id))
-                        } label: {
-                            CollectionCardView(collection: collection)
-                        }
-                        .buttonStyle(.pressableScale)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                SavedSpotsService(context: modelContext).delete(collection)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-                .padding(Spacing.lg)
-            }
-        }
-    }
+    // MARK: - Empty state
 
-    private var emptyCollections: some View {
+    private var emptySpotsState: some View {
         VStack(spacing: Spacing.sm) {
             Spacer()
-            Image(systemName: "bookmark")
+            Image(systemName: "star")
                 .font(.system(size: 36))
                 .foregroundStyle(AppColor.textTertiary)
-            Text("No collections yet")
+            Text("No saved spots")
                 .font(.headline17)
-                .foregroundStyle(AppColor.textPrimary)
-            Text("Group your saved spots into a trip or theme.")
+            Text("Tap Save on any place to rate it.")
                 .font(.footnote13)
                 .foregroundStyle(AppColor.textSecondary)
-            Button {
-                router.present(.newCollection)
-            } label: {
-                Label("New collection", systemImage: "plus")
-                    .font(.subheadline15.weight(.semibold))
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(BrandColor.sand)
-                    .foregroundStyle(.white)
-                    .clipShape(Capsule())
-            }
-            .padding(.top, Spacing.sm)
             Spacer()
         }
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
-    private var spotsList: some View {
-        if allSpots.isEmpty {
-            VStack(spacing: Spacing.sm) {
-                Spacer()
-                Image(systemName: "star")
-                    .font(.system(size: 36))
-                    .foregroundStyle(AppColor.textTertiary)
-                Text("No saved spots")
-                    .font(.headline17)
-                Text("Tap Save on any place to rate it.")
-                    .font(.footnote13)
-                    .foregroundStyle(AppColor.textSecondary)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(allSpots) { spot in
-                        Button {
-                            router.dismissSheet()
-                            router.openPOI(spot.placeId)
-                        } label: {
-                            SavedSpotRow(spot: spot)
-                        }
-                        .buttonStyle(.plain)
-                        Divider().background(AppColor.dividerSoft).padding(.leading, 76)
+    // MARK: - All flat list
+
+    private var allSpotsList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(allSpots) { spot in
+                    Button {
+                        router.dismissSheet()
+                        router.openPOI(spot.placeId)
+                    } label: {
+                        SavedSpotRow(spot: spot, showLocation: true)
                     }
+                    .buttonStyle(.plain)
+                    Divider().background(AppColor.dividerSoft).padding(.leading, 76)
                 }
-                .padding(.top, Spacing.sm)
+            }
+            .padding(.top, Spacing.sm)
+        }
+    }
+
+    // MARK: - Country group list
+
+    private var countryGroupList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(countryGroups) { group in
+                    Button {
+                        router.push(.savedGroupDetail(.country(name: group.name, flag: group.flag)))
+                    } label: {
+                        SavedGroupRow(leading: .flag(group.flag), title: group.name, count: group.count)
+                    }
+                    .buttonStyle(.plain)
+                    Divider().background(AppColor.dividerSoft).padding(.leading, 68)
+                }
+            }
+            .padding(.top, Spacing.sm)
+        }
+    }
+
+    // MARK: - City group list
+
+    private var cityGroupList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(cityGroups) { group in
+                    Button {
+                        router.push(.savedGroupDetail(.city(cityId: group.cityId)))
+                    } label: {
+                        SavedGroupRow(leading: .flag(group.flag), title: group.cityName, count: group.count)
+                    }
+                    .buttonStyle(.plain)
+                    Divider().background(AppColor.dividerSoft).padding(.leading, 68)
+                }
+            }
+            .padding(.top, Spacing.sm)
+        }
+    }
+
+    // MARK: - Mode (Type) group list
+
+    private var typeGroupList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(modeGroups) { group in
+                    Button {
+                        router.push(.savedGroupDetail(.mode(group.mode)))
+                    } label: {
+                        SavedGroupRow(leading: .modeIcon(group.mode), title: group.mode.displayName, count: group.count)
+                    }
+                    .buttonStyle(.plain)
+                    Divider().background(AppColor.dividerSoft).padding(.leading, 68)
+                }
+            }
+            .padding(.top, Spacing.sm)
+        }
+    }
+
+    // MARK: - Grouping computation
+
+    private struct CountryGroup: Identifiable {
+        let name: String
+        let flag: String
+        let count: Int
+        let lastSavedAt: Date
+        var id: String { name }
+    }
+
+    private struct CityGroup: Identifiable {
+        let cityId: String
+        let cityName: String
+        let flag: String
+        let count: Int
+        let lastSavedAt: Date
+        var id: String { cityId }
+    }
+
+    private struct ModeGroup: Identifiable {
+        let mode: TravelMode
+        let count: Int
+        let lastSavedAt: Date
+        var id: String { mode.rawValue }
+    }
+
+    private var countryGroups: [CountryGroup] {
+        var counts: [String: Int] = [:]
+        var flags: [String: String] = [:]
+        var latestDates: [String: Date] = [:]
+        for spot in allSpots {
+            let country = spot.resolvedCountryName
+            counts[country, default: 0] += 1
+            if flags[country] == nil { flags[country] = spot.resolvedFlag }
+            if let existing = latestDates[country] {
+                if spot.savedAt > existing { latestDates[country] = spot.savedAt }
+            } else {
+                latestDates[country] = spot.savedAt
             }
         }
+        return counts.keys.map { name in
+            CountryGroup(
+                name: name,
+                flag: flags[name] ?? "",
+                count: counts[name] ?? 0,
+                lastSavedAt: latestDates[name] ?? .distantPast
+            )
+        }
+        .sorted { $0.lastSavedAt > $1.lastSavedAt }
+    }
+
+    private var cityGroups: [CityGroup] {
+        var counts: [String: Int] = [:]
+        var cityNames: [String: String] = [:]
+        var flags: [String: String] = [:]
+        var latestDates: [String: Date] = [:]
+        for spot in allSpots {
+            let cid = spot.cityId
+            counts[cid, default: 0] += 1
+            if cityNames[cid] == nil { cityNames[cid] = spot.resolvedCityName }
+            if flags[cid] == nil { flags[cid] = spot.resolvedFlag }
+            if let existing = latestDates[cid] {
+                if spot.savedAt > existing { latestDates[cid] = spot.savedAt }
+            } else {
+                latestDates[cid] = spot.savedAt
+            }
+        }
+        return counts.keys.map { cityId in
+            CityGroup(
+                cityId: cityId,
+                cityName: cityNames[cityId] ?? cityId,
+                flag: flags[cityId] ?? "",
+                count: counts[cityId] ?? 0,
+                lastSavedAt: latestDates[cityId] ?? .distantPast
+            )
+        }
+        .sorted { $0.lastSavedAt > $1.lastSavedAt }
+    }
+
+    private var modeGroups: [ModeGroup] {
+        var counts: [TravelMode: Int] = [:]
+        var latestDates: [TravelMode: Date] = [:]
+        for spot in allSpots {
+            let mode = spot.mode
+            counts[mode, default: 0] += 1
+            if let existing = latestDates[mode] {
+                if spot.savedAt > existing { latestDates[mode] = spot.savedAt }
+            } else {
+                latestDates[mode] = spot.savedAt
+            }
+        }
+        return counts.keys.map { mode in
+            ModeGroup(
+                mode: mode,
+                count: counts[mode] ?? 0,
+                lastSavedAt: latestDates[mode] ?? .distantPast
+            )
+        }
+        .sorted { $0.lastSavedAt > $1.lastSavedAt }
     }
 }
 
-struct CollectionCardView: View {
-    let collection: CollectionEntity
+// MARK: - SavedGroupRow
+
+struct SavedGroupRow: View {
+    enum Leading {
+        case flag(String)
+        case modeIcon(TravelMode)
+    }
+
+    let leading: Leading
+    let title: String
+    let count: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            ZStack(alignment: .topLeading) {
-                LinearGradient(
-                    colors: collection.colorHexes.map { Color(hex: $0) },
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .aspectRatio(1.0, contentMode: .fill)
-
-                Image(systemName: collection.iconSymbol)
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(Spacing.md)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        HStack(spacing: Spacing.md) {
+            leadingView
+                .frame(width: 44, height: 44)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(collection.name)
-                    .font(.headline17)
+                Text(title)
+                    .font(.subheadline15.weight(.semibold))
                     .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(1)
-                Text("\(collection.spots.count) spots · \(collection.cityName)")
+                Text("\(count) spot\(count == 1 ? "" : "s")")
                     .font(.caption12)
                     .foregroundStyle(AppColor.textSecondary)
-                    .lineLimit(1)
             }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 4)
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption12)
+                .foregroundStyle(AppColor.textTertiary)
+        }
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var leadingView: some View {
+        switch leading {
+        case .flag(let emoji):
+            Text(emoji.isEmpty ? "🌍" : emoji)
+                .font(.system(size: 32))
+                .frame(width: 44, height: 44)
+        case .modeIcon(let mode):
+            ZStack {
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .fill(mode.tintColor)
+                Image(systemName: mode.iconSymbol)
+                    .foregroundStyle(mode.color)
+                    .font(.system(size: 20, weight: .semibold))
+            }
         }
     }
 }
+
+// MARK: - SavedSpotRow
 
 struct SavedSpotRow: View {
     let spot: SavedSpotEntity
+    var showLocation: Bool = false
 
     var body: some View {
         HStack(spacing: Spacing.sm) {
@@ -218,10 +338,25 @@ struct SavedSpotRow: View {
             .frame(width: 52, height: 52)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(spot.placeName)
-                    .font(.subheadline15.weight(.semibold))
-                    .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(1)
+                if showLocation {
+                    HStack(spacing: 4) {
+                        Text(spot.placeName)
+                            .font(.subheadline15.weight(.semibold))
+                            .foregroundStyle(AppColor.textPrimary)
+                            .lineLimit(1)
+                            .layoutPriority(0)
+                        Text("\(spot.resolvedCityName), \(spot.resolvedCountryName)")
+                            .font(.caption12)
+                            .foregroundStyle(AppColor.textSecondary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
+                } else {
+                    Text(spot.placeName)
+                        .font(.subheadline15.weight(.semibold))
+                        .foregroundStyle(AppColor.textPrimary)
+                        .lineLimit(1)
+                }
                 HStack(spacing: 6) {
                     Text(spot.placeCategory)
                     Text("·").foregroundStyle(AppColor.textTertiary)

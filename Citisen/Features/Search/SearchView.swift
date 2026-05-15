@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SearchView: View {
-    @Environment(MockPlacesService.self)
+    @Environment(PlacesService.self)
     private var places
     @Environment(UserPreferencesService.self)
     private var prefs

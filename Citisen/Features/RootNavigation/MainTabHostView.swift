@@ -7,7 +7,7 @@ struct MainTabHostView: View {
     private var prefs
     @Environment(CityService.self)
     private var city
-    @Environment(MockPlacesService.self)
+    @Environment(PlacesService.self)
     private var places
 
     var body: some View {
@@ -42,6 +42,8 @@ struct MainTabHostView: View {
             SavedCollectionsView()
         case .collectionDetail(let id):
             CollectionDetailView(collectionId: id)
+        case .savedGroupDetail(let filter):
+            SavedGroupDetailView(filter: filter)
         case .about:
             WebContentView(
                 title: "About Citisen",
@@ -100,7 +102,6 @@ struct MainTabHostView: View {
                     [.height(340), .height(600), .large],
                     selection: $router.poiDetent
                 )
-                .presentationBackgroundInteraction(.enabled(upThrough: .height(600)))
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppColor.surfaceElevated)
         } else {

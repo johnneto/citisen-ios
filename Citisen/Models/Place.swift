@@ -42,6 +42,7 @@ struct Review: Codable, Hashable, Identifiable {
 
 struct Place: Identifiable, Hashable, Codable {
     let id: UUID
+    let googlePlaceId: String?
     let cityId: String
     let name: String
     let category: String
@@ -59,6 +60,52 @@ struct Place: Identifiable, Hashable, Codable {
     let address: String
     let website: URL?
     let phone: String?
+
+    init(
+        id: UUID,
+        googlePlaceId: String? = nil,
+        cityId: String,
+        name: String,
+        category: String,
+        mode: TravelMode,
+        coordinate: Coordinate,
+        rating: Double,
+        reviewCount: Int,
+        priceLevel: Int,
+        description: String,
+        tags: [String],
+        openingHours: OpeningHours,
+        isOpenNow: Bool,
+        closesAt: String?,
+        reviews: [Review],
+        address: String,
+        website: URL?,
+        phone: String?
+    ) {
+        self.id = id
+        self.googlePlaceId = googlePlaceId
+        self.cityId = cityId
+        self.name = name
+        self.category = category
+        self.mode = mode
+        self.coordinate = coordinate
+        self.rating = rating
+        self.reviewCount = reviewCount
+        self.priceLevel = priceLevel
+        self.description = description
+        self.tags = tags
+        self.openingHours = openingHours
+        self.isOpenNow = isOpenNow
+        self.closesAt = closesAt
+        self.reviews = reviews
+        self.address = address
+        self.website = website
+        self.phone = phone
+    }
+
+    static func id(forGooglePlaceId googlePlaceId: String) -> UUID {
+        UUID.v5(namespace: .citisenPlacesNamespace, name: googlePlaceId)
+    }
 
     var budgetLabel: String {
         switch priceLevel {

@@ -1,3 +1,4 @@
+import OSLog
 import SwiftData
 import SwiftUI
 
@@ -6,7 +7,7 @@ struct CitisenApp: App {
     @State private var prefs = UserPreferencesService()
     @State private var location = LocationService()
     @State private var router = AppRouter()
-    @State private var places = MockPlacesService()
+    @State private var places = CitisenApp.makePlacesService()
     @State private var analytics = AnalyticsService()
 
     private let modelContainer: ModelContainer = {
@@ -14,6 +15,10 @@ struct CitisenApp: App {
             AppModelSchema.makeContainer()
         }
     }()
+
+    init() {
+        KeychainService.shared.bootstrap(from: AppSecrets.fromBundle())
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -26,5 +31,19 @@ struct CitisenApp: App {
                 .environment(analytics)
         }
         .modelContainer(modelContainer)
+    }
+
+    private static func makePlacesService() -> PlacesService {
+        let backend: any PlacesBackend
+        if FeatureFlags.aiCurationEnabled, FeatureFlags.googlePlacesEnabled {
+            backend = RemotePlacesBackend()
+            AppLog.app.debug("Using RemotePlacesBackend")
+        } else {
+            backend = MockPlacesBackend()
+            AppLog.app.debug("Using MockPlacesBackend (feature flags off)")
+        }
+        return MainActor.assumeIsolated {
+            PlacesService(backend: backend)
+        }
     }
 }

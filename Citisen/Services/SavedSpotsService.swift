@@ -31,13 +31,16 @@ final class SavedSpotsService {
                 existing.ratingRaw = rating.rawValue
             }
         } else {
+            let city = City.all.first(where: { $0.id == place.cityId })
             let entity = SavedSpotEntity(
                 placeId: place.id,
                 placeName: place.name,
                 placeCategory: place.category,
                 mode: place.mode,
                 rating: rating,
-                cityId: place.cityId
+                cityId: place.cityId,
+                cityName: city?.name ?? "",
+                countryName: city?.country ?? ""
             )
             context.insert(entity)
         }

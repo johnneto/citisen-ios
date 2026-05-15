@@ -7,11 +7,12 @@ final class SearchViewModel {
     var query: String = ""
     private(set) var results: [Place] = []
 
-    private let places: MockPlacesService
+    private let places: PlacesService
     private let prefs: UserPreferencesService
     private let cityService: CityService
+    private var searchTask: Task<Void, Never>?
 
-    init(places: MockPlacesService, prefs: UserPreferencesService, cityService: CityService) {
+    init(places: PlacesService, prefs: UserPreferencesService, cityService: CityService) {
         self.places = places
         self.prefs = prefs
         self.cityService = cityService
@@ -20,7 +21,7 @@ final class SearchViewModel {
     var recent: [String] { prefs.recentSearches }
 
     func performSearch() {
-        results = places.search(query: query, city: cityService.activeCity)
+        runSearch(query: query)
         if !query.trimmingCharacters(in: .whitespaces).isEmpty {
             prefs.pushRecentSearch(query)
         }
@@ -28,7 +29,7 @@ final class SearchViewModel {
 
     func onQueryChange(_ newValue: String) {
         query = newValue
-        results = places.search(query: newValue, city: cityService.activeCity)
+        runSearch(query: newValue)
     }
 
     func applyRecent(_ term: String) {
@@ -38,5 +39,16 @@ final class SearchViewModel {
 
     func clearRecents() {
         prefs.clearRecentSearches()
+    }
+
+    private func runSearch(query: String) {
+        searchTask?.cancel()
+        let city = cityService.activeCity
+        searchTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let found = await self.places.search(query: query, city: city)
+            if Task.isCancelled { return }
+            self.results = found
+        }
     }
 }

@@ -8,7 +8,7 @@ struct MapScreen: View {
     private var locationService
     @Environment(CityService.self)
     private var cityService
-    @Environment(MockPlacesService.self)
+    @Environment(PlacesService.self)
     private var places
     @Environment(AppRouter.self)
     private var router
@@ -28,20 +28,22 @@ struct MapScreen: View {
         }
         .onAppear {
             if viewModel == nil {
-                viewModel = MapViewModel(
+                let vm = MapViewModel(
                     places: places,
                     prefs: prefs,
                     cityService: cityService,
                     locationService: locationService
                 )
+                viewModel = vm
+                vm.reload()
             }
         }
         .onChange(of: cityService.activeCity) { _, _ in
             viewModel?.recenterOnCity()
+            viewModel?.reload()
         }
         .onChange(of: prefs.activeMode) { _, _ in
-            // Mode filter is derived in currentPlaces() — no state to sync,
-            // but we want a nice spring animation for pin changes.
+            viewModel?.reload()
         }
     }
 
@@ -49,7 +51,7 @@ struct MapScreen: View {
         @Bindable var vm = vm
         return Map(position: $vm.cameraPosition) {
             UserAnnotation()
-            ForEach(vm.currentPlaces()) { place in
+            ForEach(vm.filteredPlaces()) { place in
                 Annotation(place.name, coordinate: place.coordinate.clLocation) {
                     Button {
                         #if canImport(UIKit)
@@ -63,6 +65,16 @@ struct MapScreen: View {
                     .accessibilityLabel(Text("\(place.name), \(place.category)"))
                 }
             }
+            if case .loading = vm.phase {
+                ForEach(Array(skeletonAnchors(for: vm).enumerated()), id: \.offset) { _, coord in
+                    Annotation("", coordinate: coord) {
+                        SkeletonPinView()
+                    }
+                }
+            }
+        }
+        .onMapCameraChange(frequency: .onEnd) { context in
+            vm.visibleRegion = context.region
         }
         .mapControls {
             MapCompass()
@@ -70,6 +82,20 @@ struct MapScreen: View {
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: prefs.activeMode)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: vm.activeSubFilters)
+        .animation(.easeInOut(duration: 0.2), value: vm.phase)
+    }
+
+    private func skeletonAnchors(for vm: MapViewModel) -> [CLLocationCoordinate2D] {
+        let center = vm.visibleRegion?.center ?? cityService.activeCity.center.clLocation
+        let span = vm.visibleRegion?.span.latitudeDelta ?? 0.05
+        let radius = span * 0.35
+        return (0..<6).map { i in
+            let angle = Double(i) * (.pi * 2 / 6)
+            return CLLocationCoordinate2D(
+                latitude: center.latitude + cos(angle) * radius,
+                longitude: center.longitude + sin(angle) * radius * 1.5
+            )
+        }
     }
 
     private func isCurrent(_ place: Place) -> Bool {
@@ -100,13 +126,23 @@ struct MapScreen: View {
             )
             .padding(.horizontal, 12)
 
+            if vm.shouldOfferSearchThisArea() {
+                SearchThisAreaPill(
+                    onSearch: { vm.reload(forceRefresh: false) },
+                    onForceRefresh: { vm.reload(forceRefresh: true) }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             SubFilterBar(mode: prefs.activeMode, active: $vm.activeSubFilters)
         }
         .padding(.top, 54) // below safe area
+        .animation(.easeInOut(duration: 0.2), value: vm.shouldOfferSearchThisArea())
     }
 
     private func bottomSection(_ vm: MapViewModel) -> some View {
         VStack(spacing: Spacing.sm) {
+            phaseBanner(vm)
             HStack {
                 Spacer()
                 NearMeFAB {
@@ -141,6 +177,22 @@ struct MapScreen: View {
             Text("Citisen needs location access to show nearby places. Enable it in Settings.")
         }
     }
+
+    @ViewBuilder
+    private func phaseBanner(_ vm: MapViewModel) -> some View {
+        switch vm.phase {
+        case .error(let message):
+            ErrorBanner(message: message) { vm.reload(forceRefresh: true) }
+                .padding(.horizontal, Spacing.md)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        case .loaded where vm.places.isEmpty:
+            EmptyResultsCard { vm.reload(forceRefresh: true) }
+                .padding(.horizontal, Spacing.md)
+                .transition(.opacity)
+        default:
+            EmptyView()
+        }
+    }
 }
 
 private struct NearMeFAB: View {
@@ -159,5 +211,106 @@ private struct NearMeFAB: View {
         }
         .buttonStyle(.pressableScale)
         .accessibilityLabel("Center on my location")
+    }
+}
+
+private struct SkeletonPinView: View {
+    @State private var pulse: Bool = false
+
+    var body: some View {
+        Circle()
+            .fill(AppColor.surfaceElevated)
+            .frame(width: 28, height: 28)
+            .overlay(
+                Circle()
+                    .strokeBorder(AppColor.divider, lineWidth: 1)
+            )
+            .opacity(pulse ? 0.45 : 0.85)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever()) {
+                    pulse = true
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct SearchThisAreaPill: View {
+    let onSearch: () -> Void
+    let onForceRefresh: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: onSearch) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                    Text("Search this area")
+                }
+                .font(.subheadline15.weight(.semibold))
+                .foregroundStyle(AppColor.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.pressableScale)
+
+            Divider().frame(height: 18)
+
+            Button(action: onForceRefresh) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppColor.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.pressableScale)
+            .accessibilityLabel("Force refresh")
+        }
+        .liquidGlass(corner: 22, strength: .regular, interactive: true)
+        .padding(.horizontal, 12)
+    }
+}
+
+private struct ErrorBanner: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(AppColor.warning)
+            Text(message)
+                .font(.footnote13)
+                .foregroundStyle(AppColor.textPrimary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button("Retry", action: onRetry)
+                .font(.footnote13.weight(.semibold))
+                .tint(BrandColor.sand)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .liquidGlass(corner: 16, strength: .regular, interactive: false)
+    }
+}
+
+private struct EmptyResultsCard: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "mappin.slash")
+                .foregroundStyle(AppColor.textTertiary)
+            Text("No spots found here. Try a different mode or area.")
+                .font(.footnote13)
+                .foregroundStyle(AppColor.textPrimary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button("Retry", action: onRetry)
+                .font(.footnote13.weight(.semibold))
+                .tint(BrandColor.sand)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .liquidGlass(corner: 16, strength: .regular, interactive: false)
     }
 }

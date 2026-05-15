@@ -11,6 +11,8 @@ final class SavedSpotEntity {
     var note: String?
     var savedAt: Date
     var cityId: String
+    var cityName: String
+    var countryName: String
     var collection: CollectionEntity?
 
     init(
@@ -21,6 +23,8 @@ final class SavedSpotEntity {
         rating: SavedSpotRating,
         note: String? = nil,
         cityId: String,
+        cityName: String = "",
+        countryName: String = "",
         collection: CollectionEntity? = nil
     ) {
         self.placeId = placeId
@@ -31,6 +35,8 @@ final class SavedSpotEntity {
         self.note = note
         self.savedAt = Date()
         self.cityId = cityId
+        self.cityName = cityName
+        self.countryName = countryName
         self.collection = collection
     }
 
@@ -40,5 +46,17 @@ final class SavedSpotEntity {
 
     var rating: SavedSpotRating {
         SavedSpotRating(rawValue: ratingRaw) ?? .wantToVisit
+    }
+
+    var resolvedCityName: String {
+        cityName.isEmpty ? (City.all.first(where: { $0.id == cityId })?.name ?? cityId) : cityName
+    }
+
+    var resolvedCountryName: String {
+        countryName.isEmpty ? (City.all.first(where: { $0.id == cityId })?.country ?? "") : countryName
+    }
+
+    var resolvedFlag: String {
+        City.all.first(where: { $0.id == cityId })?.emojiFlag ?? ""
     }
 }

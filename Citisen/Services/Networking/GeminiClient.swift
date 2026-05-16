@@ -32,7 +32,7 @@ final class GeminiClient {
                 responseMimeType: "application/json",
                 responseSchema: .curatedSpotsArray,
                 temperature: 0.7,
-                maxOutputTokens: 1024
+                maxOutputTokens: 4096
             )
         )
 

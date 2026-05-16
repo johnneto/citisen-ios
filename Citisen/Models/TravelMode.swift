@@ -32,8 +32,8 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .standard: return "The best of the city — AI curated mix."
         case .food: return "Authentic local kitchens, not tourist traps."
         case .nature: return "Parks, coasts, quiet green escapes."
-        case .turbo: return "Quick hits when you only have an afternoon."
-        case .history: return "Layers of the past worth a detour."
+        case .turbo: return "Quick hits when you only have a day."
+        case .history: return "Details of the past worth a detour."
         case .sports: return "Pitches, trails, adrenaline venues."
         case .nightlife: return "Bars, clubs, late-night corners locals love."
         case .cafes: return "Coffee rooms for long slow mornings."
@@ -80,47 +80,46 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .standard:
             return """
-            Curate a balanced sampler of the city: one iconic-but-loved viewpoint, \
-            two beloved neighborhood spots (food or café), one cultural site, \
-            one piece of green space. Skip checklist items locals roll their eyes at.
+            Curate a balanced sampler of the area, priotizing interesting places for someone visiting the city. \
+            Skip places that are famous for being a tourist trap.
             """
         case .food:
             return """
             Focus on independently owned restaurants beloved by residents. \
             Mix price tiers, include at least one regional specialty, \
             one casual daytime spot, one dinner spot. \
-            Exclude hotel restaurants and chains.
+            Always prioritize places that offer regional food or \
+            interesting dishes that are special to the city or country. \
+            Exclude hotel restaurants and global chains.
             """
         case .nature:
             return """
-            Surface parks, urban gardens, riverside walks, coastal viewpoints, \
-            quiet green pockets. Prioritize places where locals decompress, \
-            not Instagram-famous overlooks.
+            Parks, famous trails, urban gardens, riverside walks, viewpoints, \
+            quiet green pockets. Prioritize sites that are special to the city or country.
             """
         case .turbo:
             return """
-            Pick spots that are walkable from each other and reward a quick \
-            visit (30–45 min each). Group geographically. \
-            Skip anything that requires reservations or long queues.
+            Pick spots that are a must-see when quickly visiting the region, \
+            like iconic viewpoints, famous landmarks, parks and any place that is most relevant \
+            considering a short trip.
             """
         case .history:
             return """
-            Prioritize layered, lesser-known historic sites: minor museums, \
-            period architecture residents walk past daily, plaques, \
-            neighborhoods with preserved character. \
-            Skip the top-3 monuments unless context-rich.
+            Pick spots linked to hitorical facts like conflicts, famous figures, \
+            neighbourhoods with preserved character, \
+            architecture highlights, museums and plaques.
+            Include at least 2 less known but curious spots using Atlas Obscure.
             """
         case .sports:
             return """
-            Surface running tracks, public courts, climbing gyms, swim spots, \
-            cycling routes, and active venues locals actually use. \
-            Avoid spectator-only stadiums unless community-run.
+            Suggest nice-to-see spots for travelers that like sports. \
+            Unique or famous spots, like historical sites related to sports or sports figures, \
+            stadiums and active venues locals actually use. Prioritize sites that are special to the city or country.
             """
         case .nightlife:
             return """
-            Surface bars, listening rooms, late-night cafés, and small venues \
-            that locals 25–40 actually frequent. \
-            Avoid hostel bars, tourist clubs, blog top-10 lists.
+            Bars, karaoke rooms, late-night clubs and venues \
+            that have great reputation. Prioritize sites that are special to the city or country.
             """
         case .cafes:
             return """
@@ -130,8 +129,8 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .art:
             return """
             Galleries, artist-run studios, public murals, design shops, \
-            small museums. Mix established institutions with at least two \
-            emerging or off-the-main-drag spaces.
+            and museums. Mix established institutions with at least two \
+            emerging or off-the-main-drag spaces. Prioritize sites that are special to the city or country.
             """
         }
     }

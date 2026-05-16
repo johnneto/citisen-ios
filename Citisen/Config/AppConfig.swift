@@ -13,7 +13,7 @@ enum AppConfig {
     enum Spots {
         static let cacheTTLDays: Double = 30
         static var cacheTTLSeconds: TimeInterval { cacheTTLDays * 86_400 }
-        static let maxSpotsPerRequest = 10
+        static let maxSpotsPerRequest = 20
         static let placesConcurrency = 4
         static let searchAreaTriggerMeters: CLLocationDistance = 1_000
         static let maxPhotosPerPlace = 5
@@ -55,6 +55,6 @@ enum AppConfig {
 enum FeatureFlags {
     static let aiCurationEnabled = true
     static let googlePlacesEnabled = true
-    static let analyticsEnabled = false
+    static let analyticsEnabled = true
     static let crashReportingEnabled = false
 }

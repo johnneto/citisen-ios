@@ -5,8 +5,8 @@ enum SpotsError: Error, LocalizedError {
     case timeout
     case aiUnavailable(String?)
     case aiBadJSON
-    case placesQuota
-    case placesUnauthorized
+    case placesQuota(detail: String?)
+    case placesUnauthorized(detail: String?)
     case placesNotFound(String)
     case missingAPIKey(String)
     case unknown(Error)
@@ -21,10 +21,12 @@ enum SpotsError: Error, LocalizedError {
             return detail.map { "AI curation is unavailable — \($0)" } ?? "AI curation is unavailable right now."
         case .aiBadJSON:
             return "Couldn't read the AI response. Try again."
-        case .placesQuota:
-            return "Hit the Google Places quota — try again later."
-        case .placesUnauthorized:
-            return "Google Places rejected the request. Check the API key."
+        case .placesQuota(let detail):
+            return detail.map { "Hit the Google Places quota — \($0)" }
+                ?? "Hit the Google Places quota — try again later."
+        case .placesUnauthorized(let detail):
+            return detail.map { "Google Places rejected the request: \($0)" }
+                ?? "Google Places rejected the request. Check the API key."
         case .placesNotFound(let name):
             return "Couldn't locate \"\(name)\" on Google Places."
         case .missingAPIKey(let key):

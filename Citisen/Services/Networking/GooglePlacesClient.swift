@@ -19,7 +19,7 @@ final class GooglePlacesClient {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
         guard let url = URL(string: AppConfig.Endpoints.placesSearchText) else {
-            throw SpotsError.placesUnauthorized
+            throw SpotsError.placesUnauthorized(detail: nil)
         }
 
         let payload = SearchTextRequest(
@@ -49,7 +49,7 @@ final class GooglePlacesClient {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
         guard let url = URL(string: "\(AppConfig.Endpoints.placesDetailsBase)/\(placeId)") else {
-            throw SpotsError.placesUnauthorized
+            throw SpotsError.placesUnauthorized(detail: nil)
         }
 
         var request = URLRequest(url: url)

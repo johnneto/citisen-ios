@@ -13,7 +13,8 @@ enum AppConfig {
     enum Spots {
         static let cacheTTLDays: Double = 30
         static var cacheTTLSeconds: TimeInterval { cacheTTLDays * 86_400 }
-        static let maxSpotsPerRequest = 20
+        static let minSpotsPerRequest = 20
+        static let maxSpotsPerRequest = 40
         static let placesConcurrency = 4
         static let searchAreaTriggerMeters: CLLocationDistance = 1_000
         static let maxPhotosPerPlace = 5

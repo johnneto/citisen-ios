@@ -15,7 +15,8 @@ final class GeminiClient {
         city: City,
         mode: TravelMode,
         viewport: Viewport,
-        count: Int
+        minCount: Int,
+        maxCount: Int
     ) async throws -> [CuratedSpot] {
         let key = try keychain.requireString(AppConfig.Secrets.geminiKey)
 
@@ -27,7 +28,7 @@ final class GeminiClient {
             throw SpotsError.aiUnavailable("Bad Gemini URL")
         }
 
-        let prompt = buildPrompt(city: city, mode: mode, viewport: viewport, count: count)
+        let prompt = buildPrompt(city: city, mode: mode, viewport: viewport, minCount: minCount, maxCount: maxCount)
         let body = GeminiRequest(
             contents: [GeminiContent(role: "user", parts: [GeminiPart(text: prompt)])],
             generationConfig: GeminiGenerationConfig(
@@ -43,7 +44,7 @@ final class GeminiClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
 
-        AppLog.ai.debug("Gemini request city=\(city.id, privacy: .public) mode=\(mode.rawValue, privacy: .public) count=\(count)")
+        AppLog.ai.debug("Gemini request city=\(city.id, privacy: .public) mode=\(mode.rawValue, privacy: .public) min=\(minCount) max=\(maxCount)")
 
         let response: GeminiResponse = try await http.send(request)
 
@@ -67,22 +68,29 @@ final class GeminiClient {
         }
     }
 
-    private func buildPrompt(city: City, mode: TravelMode, viewport: Viewport, count: Int) -> String {
+    private func buildPrompt(
+        city: City,
+        mode: TravelMode,
+        viewport: Viewport,
+        minCount: Int,
+        maxCount: Int
+    ) -> String {
         let lat = String(format: "%.5f", viewport.center.latitude)
         let lng = String(format: "%.5f", viewport.center.longitude)
         let radius = String(format: "%.1f", max(viewport.radiusKm, 1.0))
 
         let constraints = [
-            "no chains",
-            "no generic tourist traps (skip top-of-TripAdvisor checklist items unless genuinely exceptional)",
+            "avoid common global chains unless regional",
             "prefer places locals actually use",
             "mix neighborhoods",
-            "avoid duplicates"
+            "avoid duplicates",
+            "follow instructions of minimum and maximum of suggestions",
+            "order the response by relevance with most relevant suggestions first on the list"
         ].joined(separator: ", ")
 
         return """
-        You are a local guide for \(city.name), \(city.country).
-        Suggest exactly \(count) \(mode.displayName) spots within ~\(radius) km of (\(lat),\(lng)).
+        You are a local travel guide for \(city.name), \(city.country).
+        Suggest between \(minCount) and \(maxCount) \(mode.displayName) spots within ~\(radius) km of (\(lat),\(lng)).
         \(mode.promptInstructions)
         HARD CONSTRAINTS: \(constraints).
         Return JSON only — array of objects with name, neighborhood, one-sentence rationale.

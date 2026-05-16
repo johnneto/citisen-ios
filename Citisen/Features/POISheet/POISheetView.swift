@@ -45,6 +45,9 @@ struct POISheetView: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     header
                     titleAndMeta
+                    if !shouldExpand {
+                        whyVisitRow
+                    }
                     heroCarousel(compact: !shouldExpand)
 
                     if shouldExpand {
@@ -126,6 +129,22 @@ struct POISheetView: View {
             }
             .font(.footnote13)
             .foregroundStyle(AppColor.textSecondary)
+        }
+    }
+
+    @ViewBuilder private var whyVisitRow: some View {
+        let trimmed = place.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(place.mode.color)
+                Text(trimmed)
+                    .font(.footnote13.italic())
+                    .foregroundStyle(AppColor.textSecondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

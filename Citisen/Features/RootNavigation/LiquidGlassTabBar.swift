@@ -29,23 +29,24 @@ struct LiquidGlassTabBar: View {
             ZStack {
                 if isActive {
                     RoundedRectangle(cornerRadius: 34, style: .continuous)
-                        .fill(mode.color.opacity(0.13))
+                        .fill(mode.color.opacity(0.20))
                         .overlay(
                             RoundedRectangle(cornerRadius: 34, style: .continuous)
-                                .strokeBorder(mode.color.opacity(0.28), lineWidth: 1)
+                                .strokeBorder(mode.color.opacity(0.45), lineWidth: 1.25)
                         )
+                        .shadow(color: mode.color.opacity(0.35), radius: 6, x: 0, y: 2)
                         .padding(2)
                         .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
                 }
 
                 VStack(spacing: 2) {
                     Image(systemName: mode.iconSymbol)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(isActive ? mode.color : AppColor.textTertiary)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(isActive ? mode.color : AppColor.textSecondary)
                     Text(mode.displayName.uppercased())
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(isActive ? mode.color : AppColor.textTertiary)
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(isActive ? mode.color : AppColor.textSecondary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

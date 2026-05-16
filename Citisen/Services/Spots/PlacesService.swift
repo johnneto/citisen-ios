@@ -46,6 +46,11 @@ final class PlacesService {
         return nil
     }
 
+    func clearCache(forCityId cityId: String) {
+        backend.clearCache(forCityId: cityId)
+        snapshot = snapshot.filter { $0.value.cityId != cityId }
+    }
+
     private func ingest(_ places: [Place]) {
         for place in places {
             snapshot[place.id] = place

@@ -28,4 +28,6 @@ final class MockPlacesBackend: PlacesBackend {
     func resolvePlace(id: UUID) async -> Place? {
         MockSeed.allPlaces.first { $0.id == id }
     }
+
+    func clearCache(forCityId cityId: String) {}
 }

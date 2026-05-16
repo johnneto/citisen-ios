@@ -11,4 +11,6 @@ protocol PlacesBackend: AnyObject {
     func search(query: String, city: City) async -> [Place]
 
     func resolvePlace(id: UUID) async -> Place?
+
+    func clearCache(forCityId cityId: String)
 }

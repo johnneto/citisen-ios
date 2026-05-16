@@ -27,19 +27,21 @@ final class RemotePlacesBackend: PlacesBackend {
         forceRefresh: Bool
     ) async throws -> [Place] {
         let effectiveViewport = viewport ?? defaultViewport(for: city)
-        let key = cacheKey(cityId: city.id, mode: mode, zoomBand: effectiveViewport.zoomBand)
+        let key = cacheKey(cityId: city.id, mode: mode)
 
-        if !forceRefresh, let cached = cache.loadList(key: key) {
+        if !forceRefresh,
+           let cached = cache.loadEntry(key: key),
+           viewportMatchesCache(requested: effectiveViewport, cached: cached) {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public)")
-            return cached
+            return cached.places
         }
 
-        let count = min(effectiveViewport.dynamicCount, AppConfig.Spots.maxSpotsPerRequest)
         let curated = try await gemini.curatedSpots(
             city: city,
             mode: mode,
             viewport: effectiveViewport,
-            count: count
+            minCount: AppConfig.Spots.minSpotsPerRequest,
+            maxCount: AppConfig.Spots.maxSpotsPerRequest
         )
         try Task.checkCancellation()
 
@@ -59,7 +61,7 @@ final class RemotePlacesBackend: PlacesBackend {
             throw SpotsError.aiUnavailable("No spots could be resolved on Google Places.")
         }
 
-        cache.saveList(key: key, places: resolved)
+        cache.saveList(key: key, places: resolved, viewport: effectiveViewport)
         return resolved
     }
 
@@ -70,6 +72,10 @@ final class RemotePlacesBackend: PlacesBackend {
     func resolvePlace(id: UUID) async -> Place? {
         if let cached = cache.loadPlace(id: id) { return cached }
         return await mockFallback.resolvePlace(id: id)
+    }
+
+    func clearCache(forCityId cityId: String) {
+        cache.clearLists(forCityId: cityId)
     }
 
     // MARK: - Internals
@@ -149,8 +155,26 @@ final class RemotePlacesBackend: PlacesBackend {
         }
     }
 
-    private func cacheKey(cityId: String, mode: TravelMode, zoomBand: Int) -> String {
-        "\(cityId)_\(mode.rawValue)_z\(zoomBand)"
+    private func cacheKey(cityId: String, mode: TravelMode) -> String {
+        "\(cityId)_\(mode.rawValue)"
+    }
+
+    private func viewportMatchesCache(requested: Viewport, cached: CachedList) -> Bool {
+        let cachedCenter = CLLocation(
+            latitude: cached.viewportCenter.latitude,
+            longitude: cached.viewportCenter.longitude
+        )
+        let requestedCenter = CLLocation(
+            latitude: requested.center.latitude,
+            longitude: requested.center.longitude
+        )
+        let distance = requestedCenter.distance(from: cachedCenter)
+        guard distance <= AppConfig.Spots.searchAreaTriggerMeters else { return false }
+
+        let cachedRadius = max(cached.viewportRadiusKm, 0.01)
+        let requestedRadius = max(requested.radiusKm, 0.01)
+        let ratio = max(requestedRadius / cachedRadius, cachedRadius / requestedRadius)
+        return ratio <= 1.5
     }
 
     private func defaultViewport(for city: City) -> Viewport {

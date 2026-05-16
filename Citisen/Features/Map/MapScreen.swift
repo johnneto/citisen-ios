@@ -22,10 +22,16 @@ struct MapScreen: View {
             if let viewModel {
                 mapContent(viewModel)
                 overlay(viewModel)
+                if case .loading = viewModel.phase {
+                    MapLoadingOverlay(mode: prefs.activeMode)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                }
             } else {
                 Color.clear
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: viewModel?.phase)
         .onAppear {
             if viewModel == nil {
                 let vm = MapViewModel(
@@ -35,10 +41,21 @@ struct MapScreen: View {
                     locationService: locationService
                 )
                 viewModel = vm
-                vm.reload()
+                if locationService.authorizationStatus == .notDetermined {
+                    locationService.requestWhenInUse()
+                }
+                locationService.startUpdating()
+                if locationService.currentLocation != nil {
+                    vm.centerOnUserIfAvailable()
+                } else {
+                    vm.reload()
+                }
             }
         }
-        .onChange(of: cityService.activeCity) { _, _ in
+        .onChange(of: locationService.currentLocation?.latitude) { _, _ in
+            viewModel?.centerOnUserIfAvailable()
+        }
+        .onChange(of: cityService.citySelectionEpoch) { _, _ in
             viewModel?.recenterOnCity()
             viewModel?.reload()
         }
@@ -65,13 +82,6 @@ struct MapScreen: View {
                     .accessibilityLabel(Text("\(place.name), \(place.category)"))
                 }
             }
-            if case .loading = vm.phase {
-                ForEach(Array(skeletonAnchors(for: vm).enumerated()), id: \.offset) { _, coord in
-                    Annotation("", coordinate: coord) {
-                        SkeletonPinView()
-                    }
-                }
-            }
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             vm.visibleRegion = context.region
@@ -83,19 +93,6 @@ struct MapScreen: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: prefs.activeMode)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: vm.activeSubFilters)
         .animation(.easeInOut(duration: 0.2), value: vm.phase)
-    }
-
-    private func skeletonAnchors(for vm: MapViewModel) -> [CLLocationCoordinate2D] {
-        let center = vm.visibleRegion?.center ?? cityService.activeCity.center.clLocation
-        let span = vm.visibleRegion?.span.latitudeDelta ?? 0.05
-        let radius = span * 0.35
-        return (0..<6).map { i in
-            let angle = Double(i) * (.pi * 2 / 6)
-            return CLLocationCoordinate2D(
-                latitude: center.latitude + cos(angle) * radius,
-                longitude: center.longitude + sin(angle) * radius * 1.5
-            )
-        }
     }
 
     private func isCurrent(_ place: Place) -> Bool {
@@ -182,10 +179,6 @@ struct MapScreen: View {
     @ViewBuilder
     private func phaseBanner(_ vm: MapViewModel) -> some View {
         switch vm.phase {
-        case .loading:
-            LiquidGlassLoader(mode: prefs.activeMode)
-                .padding(.horizontal, Spacing.md)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
         case .error(let message):
             ErrorBanner(message: message) { vm.reload(forceRefresh: true) }
                 .padding(.horizontal, Spacing.md)
@@ -216,27 +209,6 @@ private struct NearMeFAB: View {
         }
         .buttonStyle(.pressableScale)
         .accessibilityLabel("Center on my location")
-    }
-}
-
-private struct SkeletonPinView: View {
-    @State private var pulse: Bool = false
-
-    var body: some View {
-        Circle()
-            .fill(AppColor.surfaceElevated)
-            .frame(width: 28, height: 28)
-            .overlay(
-                Circle()
-                    .strokeBorder(AppColor.divider, lineWidth: 1)
-            )
-            .opacity(pulse ? 0.45 : 0.85)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever()) {
-                    pulse = true
-                }
-            }
-            .accessibilityHidden(true)
     }
 }
 

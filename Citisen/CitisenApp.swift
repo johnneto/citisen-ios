@@ -4,11 +4,12 @@ import SwiftUI
 
 @main
 struct CitisenApp: App {
-    @State private var prefs = UserPreferencesService()
+    @State private var prefs: UserPreferencesService
     @State private var location = LocationService()
     @State private var router = AppRouter()
     @State private var places = CitisenApp.makePlacesService()
     @State private var analytics = AnalyticsService()
+    @State private var cityService: CityService
 
     private let modelContainer: ModelContainer = {
         MainActor.assumeIsolated {
@@ -18,6 +19,9 @@ struct CitisenApp: App {
 
     init() {
         KeychainService.shared.bootstrap(from: AppSecrets.fromBundle())
+        let prefs = UserPreferencesService()
+        _prefs = State(initialValue: prefs)
+        _cityService = State(initialValue: CityService(prefs: prefs))
     }
 
     var body: some Scene {
@@ -27,7 +31,7 @@ struct CitisenApp: App {
                 .environment(location)
                 .environment(router)
                 .environment(places)
-                .environment(CityService(prefs: prefs))
+                .environment(cityService)
                 .environment(analytics)
         }
         .modelContainer(modelContainer)

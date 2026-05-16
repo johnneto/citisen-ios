@@ -28,6 +28,7 @@ final class MapViewModel {
     let locationService: LocationService
 
     private var loadTask: Task<Void, Never>?
+    private var hasCenteredOnUser: Bool = false
 
     init(
         places: PlacesService,
@@ -61,6 +62,8 @@ final class MapViewModel {
         let city = cityService.activeCity
         let mode = prefs.activeMode
         let viewport = currentViewport(for: city)
+
+        cityService.updateFromCoordinate(viewport.center)
 
         phase = .loading
         loadTask = Task { @MainActor [weak self] in
@@ -104,6 +107,7 @@ final class MapViewModel {
                     center: coord,
                     span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
                 ))
+                cityService.updateFromCoordinate(coord)
             } else {
                 locationService.startUpdating()
             }
@@ -116,6 +120,17 @@ final class MapViewModel {
         @unknown default:
             return false
         }
+    }
+
+    func centerOnUserIfAvailable() {
+        guard !hasCenteredOnUser, let coord = locationService.currentLocation else { return }
+        hasCenteredOnUser = true
+        cameraPosition = .region(MKCoordinateRegion(
+            center: coord,
+            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+        ))
+        cityService.updateFromCoordinate(coord)
+        reload()
     }
 
     func recenterOnCity() {

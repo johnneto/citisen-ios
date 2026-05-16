@@ -143,6 +143,7 @@ struct MapScreen: View {
     private func bottomSection(_ vm: MapViewModel) -> some View {
         VStack(spacing: Spacing.sm) {
             phaseBanner(vm)
+                .animation(.easeInOut(duration: 0.25), value: vm.phase)
             HStack {
                 Spacer()
                 NearMeFAB {
@@ -181,6 +182,10 @@ struct MapScreen: View {
     @ViewBuilder
     private func phaseBanner(_ vm: MapViewModel) -> some View {
         switch vm.phase {
+        case .loading:
+            LiquidGlassLoader(mode: prefs.activeMode)
+                .padding(.horizontal, Spacing.md)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         case .error(let message):
             ErrorBanner(message: message) { vm.reload(forceRefresh: true) }
                 .padding(.horizontal, Spacing.md)

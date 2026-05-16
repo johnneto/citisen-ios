@@ -125,14 +125,11 @@ final class RemotePlacesBackend: PlacesBackend {
     ) async throws -> Place? {
         let query = "\(curated.name), \(city.name)"
         do {
-            guard let placeId = try await places.findPlaceId(text: query, near: viewport.center) else {
-                AppLog.places.debug("ZERO_RESULTS for \(curated.name, privacy: .public)")
+            guard let details = try await places.searchText(query: query, near: viewport.center) else {
+                AppLog.places.debug("No match for \(curated.name, privacy: .public)")
                 return nil
             }
             try Task.checkCancellation()
-            guard let details = try await places.placeDetails(placeId: placeId) else {
-                return nil
-            }
             return PlaceMapper.makePlace(
                 from: details,
                 curated: curated,

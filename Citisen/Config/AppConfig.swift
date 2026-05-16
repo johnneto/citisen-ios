@@ -16,6 +16,9 @@ enum AppConfig {
         static let maxSpotsPerRequest = 10
         static let placesConcurrency = 4
         static let searchAreaTriggerMeters: CLLocationDistance = 1_000
+        static let maxPhotosPerPlace = 5
+        static let photoMaxWidthPx = 1_200
+        static let photoMaxHeightPx = 800
     }
 
     enum Endpoints {
@@ -25,15 +28,22 @@ enum AppConfig {
             "\(geminiBase)/models/\(geminiModel):generateContent"
         }
 
-        static let placesFindFromText = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-        static let placesDetails = "https://maps.googleapis.com/maps/api/place/details/json"
-        static let placeDetailsFields = [
-            "place_id", "name", "formatted_address", "geometry",
-            "rating", "user_ratings_total", "price_level", "types",
-            "opening_hours", "current_opening_hours", "website",
-            "formatted_phone_number", "international_phone_number",
-            "reviews", "editorial_summary"
-        ].joined(separator: ",")
+        static let placesBase = "https://places.googleapis.com/v1"
+        static let placesSearchText = "\(placesBase)/places:searchText"
+        static let placesDetailsBase = "\(placesBase)/places"
+
+        private static let placeFieldPaths = [
+            "id", "displayName", "formattedAddress", "location",
+            "rating", "userRatingCount", "priceLevel", "types",
+            "regularOpeningHours", "currentOpeningHours", "websiteUri",
+            "nationalPhoneNumber", "internationalPhoneNumber",
+            "reviews", "editorialSummary", "photos"
+        ]
+
+        static let searchTextFieldMask = placeFieldPaths
+            .map { "places.\($0)" }
+            .joined(separator: ",")
+        static let placeDetailsFieldMask = placeFieldPaths.joined(separator: ",")
     }
 
     enum Secrets {

@@ -11,65 +11,74 @@ final class GooglePlacesClient {
         self.keychain = keychain
     }
 
-    func findPlaceId(text: String, near center: CLLocationCoordinate2D) async throws -> String? {
+    func searchText(
+        query: String,
+        near center: CLLocationCoordinate2D,
+        radius: Double = 5_000
+    ) async throws -> PlaceV1? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
-        var components = URLComponents(string: AppConfig.Endpoints.placesFindFromText)!
-        components.queryItems = [
-            URLQueryItem(name: "input", value: text),
-            URLQueryItem(name: "inputtype", value: "textquery"),
-            URLQueryItem(name: "fields", value: "place_id"),
-            URLQueryItem(
-                name: "locationbias",
-                value: "circle:5000@\(center.latitude),\(center.longitude)"
+        guard let url = URL(string: AppConfig.Endpoints.placesSearchText) else {
+            throw SpotsError.placesUnauthorized
+        }
+
+        let payload = SearchTextRequest(
+            textQuery: query,
+            locationBias: .init(
+                circle: .init(
+                    center: LatLngV1(latitude: center.latitude, longitude: center.longitude),
+                    radius: radius
+                )
             ),
-            URLQueryItem(name: "key", value: key)
-        ]
-        guard let url = components.url else {
-            throw SpotsError.placesUnauthorized
-        }
+            maxResultCount: 1
+        )
 
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = "POST"
+        request.setValue(key, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue(AppConfig.Endpoints.searchTextFieldMask, forHTTPHeaderField: "X-Goog-FieldMask")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONEncoder().encode(payload)
 
-        let response: FindPlaceResponse = try await http.send(request)
-        try checkStatus(response.status, errorMessage: response.errorMessage)
-        return response.candidates?.first?.placeId
+        let response: SearchTextResponse = try await http.send(request)
+        return response.places?.first
     }
 
-    func placeDetails(placeId: String) async throws -> PlaceDetailsPayload? {
+    func placeDetails(id placeId: String) async throws -> PlaceV1? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
-        var components = URLComponents(string: AppConfig.Endpoints.placesDetails)!
-        components.queryItems = [
-            URLQueryItem(name: "place_id", value: placeId),
-            URLQueryItem(name: "fields", value: AppConfig.Endpoints.placeDetailsFields),
-            URLQueryItem(name: "key", value: key)
-        ]
-        guard let url = components.url else {
+        guard let url = URL(string: "\(AppConfig.Endpoints.placesDetailsBase)/\(placeId)") else {
             throw SpotsError.placesUnauthorized
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.setValue(key, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue(AppConfig.Endpoints.placeDetailsFieldMask, forHTTPHeaderField: "X-Goog-FieldMask")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let response: PlaceDetailsResponse = try await http.send(request)
-        try checkStatus(response.status, errorMessage: response.errorMessage)
-        return response.result
+        let place: PlaceV1 = try await http.send(request)
+        return place
     }
 
-    private func checkStatus(_ status: String, errorMessage: String?) throws {
-        switch status {
-        case "OK", "ZERO_RESULTS":
-            return
-        case "OVER_QUERY_LIMIT":
-            throw SpotsError.placesQuota
-        case "REQUEST_DENIED", "INVALID_REQUEST":
-            AppLog.places.error("Google Places error: \(status, privacy: .public) \(errorMessage ?? "", privacy: .public)")
-            throw SpotsError.placesUnauthorized
-        default:
-            AppLog.places.error("Unknown Google Places status: \(status, privacy: .public)")
-            throw SpotsError.aiUnavailable(errorMessage ?? status)
+    /// Builds a Places API (New) photo media URL for an `AsyncImage` to load.
+    /// The API key is appended as `?key=` because `AsyncImage` cannot set headers.
+    /// Returns nil if the key is unavailable — caller falls back to a placeholder.
+    func photoMediaURL(
+        name: String,
+        maxWidthPx: Int = AppConfig.Spots.photoMaxWidthPx,
+        maxHeightPx: Int = AppConfig.Spots.photoMaxHeightPx
+    ) -> URL? {
+        guard let key = try? keychain.requireString(AppConfig.Secrets.googlePlacesKey) else {
+            return nil
         }
+        var components = URLComponents(string: "\(AppConfig.Endpoints.placesBase)/\(name)/media")
+        components?.queryItems = [
+            URLQueryItem(name: "maxWidthPx", value: String(maxWidthPx)),
+            URLQueryItem(name: "maxHeightPx", value: String(maxHeightPx)),
+            URLQueryItem(name: "key", value: key)
+        ]
+        return components?.url
     }
 }

@@ -60,6 +60,7 @@ struct Place: Identifiable, Hashable, Codable {
     let address: String
     let website: URL?
     let phone: String?
+    let photoNames: [String]?
 
     init(
         id: UUID,
@@ -80,7 +81,8 @@ struct Place: Identifiable, Hashable, Codable {
         reviews: [Review],
         address: String,
         website: URL?,
-        phone: String?
+        phone: String?,
+        photoNames: [String]? = nil
     ) {
         self.id = id
         self.googlePlaceId = googlePlaceId
@@ -101,6 +103,7 @@ struct Place: Identifiable, Hashable, Codable {
         self.address = address
         self.website = website
         self.phone = phone
+        self.photoNames = photoNames
     }
 
     static func id(forGooglePlaceId googlePlaceId: String) -> UUID {

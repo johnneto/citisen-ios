@@ -142,14 +142,27 @@ struct POISheetView: View {
     private var heroCarousel: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(0..<3, id: \.self) { index in
-                    PlaceholderPhoto(
-                        seed: "\(place.id.uuidString)-\(index)",
-                        mode: place.mode,
-                        height: 160,
-                        cornerRadius: Radius.md
-                    )
-                    .frame(width: 200)
+                if let photoNames = place.photoNames, !photoNames.isEmpty {
+                    ForEach(Array(photoNames.enumerated()), id: \.offset) { index, name in
+                        PlacePhotoView(
+                            photoName: name,
+                            mode: place.mode,
+                            seed: "\(place.id.uuidString)-\(index)",
+                            height: 160,
+                            cornerRadius: Radius.md
+                        )
+                        .frame(width: 240)
+                    }
+                } else {
+                    ForEach(0..<3, id: \.self) { index in
+                        PlaceholderPhoto(
+                            seed: "\(place.id.uuidString)-\(index)",
+                            mode: place.mode,
+                            height: 160,
+                            cornerRadius: Radius.md
+                        )
+                        .frame(width: 200)
+                    }
                 }
             }
         }

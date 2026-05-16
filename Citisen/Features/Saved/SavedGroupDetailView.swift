@@ -19,8 +19,9 @@ struct SavedGroupDetailView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(filteredSpots) { spot in
                             Button {
+                                let ids = filteredSpots.map(\.placeId)
                                 router.dismissSheet()
-                                router.openPOI(spot.placeId)
+                                router.openPOI(spot.placeId, in: ids)
                             } label: {
                                 SavedSpotRow(spot: spot, showLocation: showLocation)
                             }

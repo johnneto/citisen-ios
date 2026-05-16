@@ -141,7 +141,8 @@ struct CollectionDetailView: View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(collection.spots) { spot in
                 Button {
-                    router.openPOI(spot.placeId)
+                    let ids = collection.spots.map(\.placeId)
+                    router.openPOI(spot.placeId, in: ids)
                 } label: {
                     SavedSpotRow(spot: spot)
                 }

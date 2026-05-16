@@ -62,6 +62,16 @@ struct MapScreen: View {
         .onChange(of: prefs.activeMode) { _, _ in
             viewModel?.reload()
         }
+        .onChange(of: router.poiSelectedId) { _, newValue in
+            guard let newValue, let vm = viewModel else { return }
+            guard let place = vm.placesService.place(id: newValue) else { return }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                vm.cameraPosition = .region(MKCoordinateRegion(
+                    center: place.coordinate.clLocation,
+                    span: vm.visibleRegion?.span ?? MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                ))
+            }
+        }
     }
 
     private func mapContent(_ vm: MapViewModel) -> some View {
@@ -74,7 +84,7 @@ struct MapScreen: View {
                         #if canImport(UIKit)
                         UISelectionFeedbackGenerator().selectionChanged()
                         #endif
-                        router.openPOI(place.id)
+                        router.openPOI(place.id, in: vm.filteredPlaces().map(\.id))
                     } label: {
                         MapPinView(mode: place.mode, isSelected: isCurrent(place))
                     }
@@ -96,8 +106,7 @@ struct MapScreen: View {
     }
 
     private func isCurrent(_ place: Place) -> Bool {
-        if case .poi(let id) = router.presentedSheet, id == place.id { return true }
-        return false
+        router.presentedSheet == .poi && router.poiSelectedId == place.id
     }
 
     @ViewBuilder

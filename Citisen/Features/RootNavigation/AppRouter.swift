@@ -9,6 +9,8 @@ final class AppRouter {
     var presentedSheet: AppSheet?
     var isHamburgerOpen: Bool = false
     var poiDetent: PresentationDetent = .height(340)
+    var poiPlaceIds: [UUID] = []
+    var poiSelectedId: UUID?
     var nearMeToast: String?
 
     func push(_ route: AppRoute) {
@@ -25,6 +27,8 @@ final class AppRouter {
 
     func dismissSheet() {
         presentedSheet = nil
+        poiPlaceIds = []
+        poiSelectedId = nil
     }
 
     func openHamburger() {
@@ -39,9 +43,12 @@ final class AppRouter {
         }
     }
 
-    func openPOI(_ placeId: UUID) {
+    func openPOI(_ placeId: UUID, in placeIds: [UUID]) {
         poiDetent = .height(340)
-        presentedSheet = .poi(placeId: placeId)
+        let normalizedIds = placeIds.contains(placeId) ? placeIds : [placeId] + placeIds
+        poiPlaceIds = normalizedIds
+        poiSelectedId = placeId
+        presentedSheet = .poi
     }
 
     func showToast(_ message: String) {

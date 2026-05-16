@@ -5,6 +5,8 @@ import SwiftUI
 // swiftlint:disable:next type_body_length
 struct POISheetView: View {
     let place: Place
+    var pageIndex: Int?
+    var pageCount: Int?
 
     @Environment(\.modelContext)
     private var modelContext
@@ -88,8 +90,18 @@ struct POISheetView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             ModeChip(mode: place.mode, style: .tint)
+            if let pageIndex, let pageCount, pageCount > 1 {
+                Text("\(pageIndex + 1) / \(pageCount)")
+                    .font(.caption12.weight(.semibold))
+                    .foregroundStyle(AppColor.textSecondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(AppColor.surfaceGrouped)
+                    .clipShape(Capsule())
+                    .accessibilityLabel("Place \(pageIndex + 1) of \(pageCount)")
+            }
             Spacer()
             Button {
                 dismiss()

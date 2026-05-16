@@ -183,9 +183,10 @@ struct SearchView: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(vm.results) { place in
                     Button {
+                        let ids = vm.results.map(\.id)
                         router.dismissSheet()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            router.openPOI(place.id)
+                            router.openPOI(place.id, in: ids)
                         }
                     } label: {
                         resultRow(place)

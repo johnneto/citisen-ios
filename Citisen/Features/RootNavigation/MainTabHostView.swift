@@ -72,8 +72,8 @@ struct MainTabHostView: View {
             NewCollectionSheet()
                 .presentationDetents([.height(420)])
                 .presentationDragIndicator(.visible)
-        case .poi(let placeId):
-            poiSheet(for: placeId)
+        case .poi:
+            poiPager()
         }
     }
 
@@ -94,22 +94,36 @@ struct MainTabHostView: View {
     }
 
     @ViewBuilder
-    private func poiSheet(for placeId: UUID) -> some View {
+    private func poiPager() -> some View {
         @Bindable var router = router
-        if let place = places.place(id: placeId) {
-            POISheetView(place: place)
-                .presentationDetents(
-                    [.height(340), .height(600), .large],
-                    selection: $router.poiDetent
-                )
-                .presentationDragIndicator(.visible)
-                .presentationBackground(AppColor.surfaceElevated)
-        } else {
-            VStack {
-                Text("Place not found").font(.headline17)
+        let ids = router.poiPlaceIds
+
+        TabView(selection: $router.poiSelectedId) {
+            ForEach(Array(ids.enumerated()), id: \.element) { index, id in
+                Group {
+                    if let place = places.place(id: id) {
+                        POISheetView(
+                            place: place,
+                            pageIndex: ids.count > 1 ? index : nil,
+                            pageCount: ids.count > 1 ? ids.count : nil
+                        )
+                    } else {
+                        VStack {
+                            Text("Place not found").font(.headline17)
+                        }
+                        .padding()
+                    }
+                }
+                .tag(Optional(id))
             }
-            .padding()
         }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .presentationDetents(
+            [.height(340), .height(600), .large],
+            selection: $router.poiDetent
+        )
+        .presentationDragIndicator(.visible)
+        .presentationBackground(AppColor.surfaceElevated)
     }
 
     private func toastView(_ text: String) -> some View {

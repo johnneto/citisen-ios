@@ -28,7 +28,7 @@ enum AppSheet: Identifiable, Hashable {
     case citySwitcher
     case modePicker(slotIndex: Int)
     case newCollection
-    case poi(placeId: UUID)
+    case poi
 
     var id: String {
         switch self {
@@ -36,7 +36,7 @@ enum AppSheet: Identifiable, Hashable {
         case .citySwitcher: return "city"
         case .modePicker(let idx): return "mode-\(idx)"
         case .newCollection: return "new-collection"
-        case .poi(let id): return "poi-\(id.uuidString)"
+        case .poi: return "poi"
         }
     }
 }

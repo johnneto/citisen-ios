@@ -45,11 +45,11 @@ struct POISheetView: View {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     header
                     titleAndMeta
+                    heroCarousel(compact: !shouldExpand)
 
                     if shouldExpand {
                         Divider().background(AppColor.dividerSoft).padding(.vertical, 2)
                         tagsRow
-                        heroCarousel
                         descriptionBlock
                         hoursBlock(vm: vm)
                         contactBlock
@@ -140,8 +140,12 @@ struct POISheetView: View {
         }
     }
 
-    private var heroCarousel: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+    private func heroCarousel(compact: Bool) -> some View {
+        let photoHeight: CGFloat = compact ? 96 : 160
+        let photoWidth: CGFloat = compact ? 140 : 240
+        let placeholderWidth: CGFloat = compact ? 120 : 200
+
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 if let photoNames = place.photoNames, !photoNames.isEmpty {
                     ForEach(Array(photoNames.enumerated()), id: \.offset) { index, name in
@@ -149,20 +153,20 @@ struct POISheetView: View {
                             photoName: name,
                             mode: place.mode,
                             seed: "\(place.id.uuidString)-\(index)",
-                            height: 160,
+                            height: photoHeight,
                             cornerRadius: Radius.md
                         )
-                        .frame(width: 240)
+                        .frame(width: photoWidth)
                     }
                 } else {
                     ForEach(0..<3, id: \.self) { index in
                         PlaceholderPhoto(
                             seed: "\(place.id.uuidString)-\(index)",
                             mode: place.mode,
-                            height: 160,
+                            height: photoHeight,
                             cornerRadius: Radius.md
                         )
-                        .frame(width: 200)
+                        .frame(width: placeholderWidth)
                     }
                 }
             }

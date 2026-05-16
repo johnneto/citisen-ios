@@ -41,8 +41,7 @@ struct SearchView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    @ViewBuilder private var content: some View {
         if let viewModel {
             VStack(spacing: 0) {
                 searchField(viewModel)
@@ -95,6 +94,7 @@ struct SearchView: View {
         .padding(.vertical, Spacing.sm)
     }
 
+    // swiftlint:disable:next function_body_length
     private func recents(_ vm: SearchViewModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {

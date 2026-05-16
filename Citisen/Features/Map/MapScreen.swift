@@ -89,8 +89,8 @@ struct MapScreen: View {
         let center = vm.visibleRegion?.center ?? cityService.activeCity.center.clLocation
         let span = vm.visibleRegion?.span.latitudeDelta ?? 0.05
         let radius = span * 0.35
-        return (0..<6).map { i in
-            let angle = Double(i) * (.pi * 2 / 6)
+        return (0..<6).map { index in
+            let angle = Double(index) * (.pi * 2 / 6)
             return CLLocationCoordinate2D(
                 latitude: center.latitude + cos(angle) * radius,
                 longitude: center.longitude + sin(angle) * radius * 1.5

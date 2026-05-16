@@ -14,7 +14,9 @@ final class GooglePlacesClient {
     func findPlaceId(text: String, near center: CLLocationCoordinate2D) async throws -> String? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
-        var components = URLComponents(string: AppConfig.Endpoints.placesFindFromText)!
+        guard var components = URLComponents(string: AppConfig.Endpoints.placesFindFromText) else {
+            throw SpotsError.placesUnauthorized
+        }
         components.queryItems = [
             URLQueryItem(name: "input", value: text),
             URLQueryItem(name: "inputtype", value: "textquery"),
@@ -40,7 +42,9 @@ final class GooglePlacesClient {
     func placeDetails(placeId: String) async throws -> PlaceDetailsPayload? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
-        var components = URLComponents(string: AppConfig.Endpoints.placesDetails)!
+        guard var components = URLComponents(string: AppConfig.Endpoints.placesDetails) else {
+            throw SpotsError.placesUnauthorized
+        }
         components.queryItems = [
             URLQueryItem(name: "place_id", value: placeId),
             URLQueryItem(name: "fields", value: AppConfig.Endpoints.placeDetailsFields),

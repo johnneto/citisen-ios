@@ -3,7 +3,8 @@ import SwiftData
 
 @Model
 final class CollectionEntity {
-    @Attribute(.unique) var id: UUID
+    @Attribute(.unique)
+    var id: UUID
     var name: String
     var cityId: String
     var cityName: String

@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 
 extension UUID {
+    // swiftlint:disable:next force_unwrapping
     static let citisenPlacesNamespace = UUID(uuidString: "1B671A64-40D5-491E-99B0-DA01FF1F3341")!
 
     static func v5(namespace: UUID, name: String) -> UUID {

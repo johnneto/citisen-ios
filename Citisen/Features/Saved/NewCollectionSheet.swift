@@ -33,7 +33,8 @@ struct NewCollectionSheet: View {
 
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text("NAME")
-                        .font(.caption11Bold).tracking(0.8)
+                        .font(.caption11Bold)
+                        .tracking(0.8)
                         .foregroundStyle(AppColor.textSecondary)
                     TextField("e.g. Tallinn Favourites", text: $name)
                         .focused($isFocused)
@@ -45,7 +46,8 @@ struct NewCollectionSheet: View {
 
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text("ICON")
-                        .font(.caption11Bold).tracking(0.8)
+                        .font(.caption11Bold)
+                        .tracking(0.8)
                         .foregroundStyle(AppColor.textSecondary)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -68,7 +70,8 @@ struct NewCollectionSheet: View {
 
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text("COLOUR")
-                        .font(.caption11Bold).tracking(0.8)
+                        .font(.caption11Bold)
+                        .tracking(0.8)
                         .foregroundStyle(AppColor.textSecondary)
                     HStack(spacing: 10) {
                         ForEach(palettes.indices, id: \.self) { idx in

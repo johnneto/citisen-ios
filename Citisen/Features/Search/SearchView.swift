@@ -41,8 +41,7 @@ struct SearchView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    @ViewBuilder private var content: some View {
         if let viewModel {
             VStack(spacing: 0) {
                 searchField(viewModel)
@@ -99,71 +98,82 @@ struct SearchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if !vm.recent.isEmpty {
-                    HStack {
-                        Text("Recent searches")
-                            .font(.caption11Bold)
-                            .tracking(0.8)
-                            .foregroundStyle(AppColor.textSecondary)
-                        Spacer()
-                        Button("Clear") { vm.clearRecents() }
-                            .font(.caption12)
-                            .foregroundStyle(BrandColor.sand)
-                    }
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.top, Spacing.md)
-                    .padding(.bottom, Spacing.xs)
-
-                    ForEach(vm.recent, id: \.self) { term in
-                        Button {
-                            vm.applyRecent(term)
-                        } label: {
-                            HStack(spacing: Spacing.sm) {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .foregroundStyle(AppColor.textTertiary)
-                                Text(term)
-                                    .font(.subheadline15)
-                                    .foregroundStyle(AppColor.textPrimary)
-                                Spacer()
-                                Image(systemName: "arrow.up.left")
-                                    .font(.caption12)
-                                    .foregroundStyle(AppColor.textTertiary)
-                            }
-                            .padding(.horizontal, Spacing.lg)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        Divider().background(AppColor.dividerSoft).padding(.leading, Spacing.lg)
-                    }
+                    recentsSection(vm)
                 }
+                trySection(vm)
+            }
+        }
+    }
 
-                Text("Try")
+    private func recentsSection(_ vm: SearchViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Recent searches")
                     .font(.caption11Bold)
                     .tracking(0.8)
                     .foregroundStyle(AppColor.textSecondary)
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.top, Spacing.lg)
-                    .padding(.bottom, Spacing.xs)
+                Spacer()
+                Button("Clear") { vm.clearRecents() }
+                    .font(.caption12)
+                    .foregroundStyle(BrandColor.sand)
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.md)
+            .padding(.bottom, Spacing.xs)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(["Old Town", "Cafés", "Viewpoints", "Sauna", "Markets"], id: \.self) { term in
-                            Button {
-                                vm.applyRecent(term)
-                            } label: {
-                                Text(term)
-                                    .font(.footnote13.weight(.medium))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(BrandColor.sandTint)
-                                    .foregroundStyle(BrandColor.sandDeep)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.pressableScale)
-                        }
+            ForEach(vm.recent, id: \.self) { term in
+                Button {
+                    vm.applyRecent(term)
+                } label: {
+                    HStack(spacing: Spacing.sm) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundStyle(AppColor.textTertiary)
+                        Text(term)
+                            .font(.subheadline15)
+                            .foregroundStyle(AppColor.textPrimary)
+                        Spacer()
+                        Image(systemName: "arrow.up.left")
+                            .font(.caption12)
+                            .foregroundStyle(AppColor.textTertiary)
                     }
                     .padding(.horizontal, Spacing.lg)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                Divider().background(AppColor.dividerSoft).padding(.leading, Spacing.lg)
+            }
+        }
+    }
+
+    private func trySection(_ vm: SearchViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Try")
+                .font(.caption11Bold)
+                .tracking(0.8)
+                .foregroundStyle(AppColor.textSecondary)
+                .padding(.horizontal, Spacing.lg)
+                .padding(.top, Spacing.lg)
+                .padding(.bottom, Spacing.xs)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(["Old Town", "Cafés", "Viewpoints", "Sauna", "Markets"], id: \.self) { term in
+                        Button {
+                            vm.applyRecent(term)
+                        } label: {
+                            Text(term)
+                                .font(.footnote13.weight(.medium))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(BrandColor.sandTint)
+                                .foregroundStyle(BrandColor.sandDeep)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.pressableScale)
+                    }
+                }
+                .padding(.horizontal, Spacing.lg)
             }
         }
     }

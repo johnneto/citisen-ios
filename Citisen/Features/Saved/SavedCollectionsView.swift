@@ -301,8 +301,7 @@ struct SavedGroupRow: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private var leadingView: some View {
+    @ViewBuilder private var leadingView: some View {
         switch leading {
         case .flag(let emoji):
             Text(emoji.isEmpty ? "🌍" : emoji)

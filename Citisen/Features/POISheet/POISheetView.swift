@@ -2,6 +2,7 @@ import MapKit
 import SwiftData
 import SwiftUI
 
+// swiftlint:disable:next type_body_length
 struct POISheetView: View {
     let place: Place
 
@@ -282,10 +283,10 @@ struct POISheetView: View {
                             .foregroundStyle(AppColor.textTertiary)
                         Spacer()
                         HStack(spacing: 1) {
-                            ForEach(0..<5, id: \.self) { i in
-                                Image(systemName: i < review.rating ? "star.fill" : "star")
+                            ForEach(0..<5, id: \.self) { idx in
+                                Image(systemName: idx < review.rating ? "star.fill" : "star")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(i < review.rating ? AppColor.warning : AppColor.textTertiary)
+                                    .foregroundStyle(idx < review.rating ? AppColor.warning : AppColor.textTertiary)
                             }
                         }
                     }

@@ -19,7 +19,9 @@ final class GeminiClient {
     ) async throws -> [CuratedSpot] {
         let key = try keychain.requireString(AppConfig.Secrets.geminiKey)
 
-        var components = URLComponents(string: AppConfig.Endpoints.geminiGenerateContent)!
+        guard var components = URLComponents(string: AppConfig.Endpoints.geminiGenerateContent) else {
+            throw SpotsError.aiUnavailable("Bad Gemini URL")
+        }
         components.queryItems = [URLQueryItem(name: "key", value: key)]
         guard let url = components.url else {
             throw SpotsError.aiUnavailable("Bad Gemini URL")

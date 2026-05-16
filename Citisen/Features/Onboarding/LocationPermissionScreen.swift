@@ -24,7 +24,10 @@ struct LocationPermissionScreen: View {
                         .foregroundStyle(AppColor.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Citisen uses your location to surface nearby places that match your active travel modes. Nothing is ever shared without you.")
+                    Text(
+                        "Citisen uses your location to surface nearby places that match "
+                        + "your active travel modes. Nothing is ever shared without you."
+                    )
                         .font(.callout16)
                         .foregroundStyle(AppColor.textSecondary)
                         .multilineTextAlignment(.center)

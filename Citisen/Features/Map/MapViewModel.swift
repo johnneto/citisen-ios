@@ -9,6 +9,7 @@ final class MapViewModel {
     enum Phase: Equatable {
         case idle
         case loading
+        case streaming
         case loaded
         case error(String)
     }
@@ -66,17 +67,26 @@ final class MapViewModel {
         cityService.updateFromCoordinate(viewport.center)
 
         phase = .loading
+        places = []
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let stream = self.placesService.streamSpots(
+                city: city,
+                mode: mode,
+                viewport: viewport,
+                forceRefresh: forceRefresh
+            )
+            var collected: [Place] = []
             do {
-                let result = try await self.placesService.loadSpots(
-                    city: city,
-                    mode: mode,
-                    viewport: viewport,
-                    forceRefresh: forceRefresh
-                )
+                for try await place in stream {
+                    if Task.isCancelled { return }
+                    collected.append(place)
+                    self.places = collected
+                    if self.phase != .streaming {
+                        self.phase = .streaming
+                    }
+                }
                 if Task.isCancelled { return }
-                self.places = result
                 self.phase = .loaded
                 self.lastFetchCenter = viewport.center
             } catch is CancellationError {

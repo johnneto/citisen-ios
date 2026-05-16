@@ -76,6 +76,22 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         allCases.filter { $0 != .standard }
     }
 
+    /// Min/max number of curated spots Gemini should return for this mode.
+    /// Falls back to AppConfig defaults; tweaked per mode where the experience benefits
+    /// from a tighter or looser batch (e.g. turbo = quick hits, history = denser exploration).
+    var suggestionCountRange: (min: Int, max: Int) {
+        switch self {
+        case .turbo:
+            return (10, 12)
+        case .nature, .sports:
+            return (10, 20)
+        case .history, .art:
+            return (20, 28)
+        case .standard, .food, .cafes, .nightlife:
+            return (AppConfig.Spots.minSpotsPerRequest, AppConfig.Spots.maxSpotsPerRequest)
+        }
+    }
+
     var promptInstructions: String {
         switch self {
         case .standard:

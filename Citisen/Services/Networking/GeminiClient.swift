@@ -35,7 +35,8 @@ final class GeminiClient {
                 responseMimeType: "application/json",
                 responseSchema: .curatedSpotsArray,
                 temperature: 0.7,
-                maxOutputTokens: 4096
+                maxOutputTokens: 4096,
+                thinkingConfig: GeminiThinkingConfig(thinkingBudget: 0)
             )
         )
 
@@ -43,17 +44,22 @@ final class GeminiClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        request.timeoutInterval = 45
 
         AppLog.ai.debug("Gemini request city=\(city.id, privacy: .public) mode=\(mode.rawValue, privacy: .public) min=\(minCount) max=\(maxCount)")
 
-        let response: GeminiResponse = try await http.send(request)
+        let response: GeminiResponse = try await sendWithTimeoutRetry(request)
 
         if let geminiError = response.error {
             throw SpotsError.aiUnavailable(geminiError.message)
         }
 
-        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
-            throw SpotsError.aiUnavailable("Empty Gemini response")
+        let candidate = response.candidates?.first
+        let finishReason = candidate?.finishReason ?? "-"
+
+        guard let text = candidate?.content?.parts?.first?.text else {
+            AppLog.ai.error("Empty Gemini response — finishReason=\(finishReason, privacy: .public)")
+            throw SpotsError.aiUnavailable("Empty Gemini response (\(finishReason))")
         }
 
         guard let textData = text.data(using: .utf8) else {
@@ -63,7 +69,7 @@ final class GeminiClient {
         do {
             return try JSONDecoder().decode([CuratedSpot].self, from: textData)
         } catch {
-            AppLog.ai.error("Gemini JSON decode failed: \(error.localizedDescription, privacy: .public)")
+            AppLog.ai.error("Gemini JSON decode failed — finishReason=\(finishReason, privacy: .public) err=\(error.localizedDescription, privacy: .public)")
             throw SpotsError.aiBadJSON
         }
     }
@@ -84,7 +90,6 @@ final class GeminiClient {
             "prefer places locals actually use",
             "mix neighborhoods",
             "avoid duplicates",
-            "follow instructions of minimum and maximum of suggestions",
             "order the response by relevance with most relevant suggestions first on the list"
         ].joined(separator: ", ")
 
@@ -93,7 +98,17 @@ final class GeminiClient {
         Suggest between \(minCount) and \(maxCount) \(mode.displayName) spots within ~\(radius) km of (\(lat),\(lng)).
         \(mode.promptInstructions)
         HARD CONSTRAINTS: \(constraints).
-        Return JSON only — array of objects with name, neighborhood, one-sentence rationale.
         """
+    }
+
+    private func sendWithTimeoutRetry(_ request: URLRequest) async throws -> GeminiResponse {
+        do {
+            return try await http.send(request)
+        } catch SpotsError.timeout {
+            AppLog.ai.debug("Gemini timed out — retrying once")
+            try await Task.sleep(nanoseconds: 500_000_000)
+            try Task.checkCancellation()
+            return try await http.send(request)
+        }
     }
 }

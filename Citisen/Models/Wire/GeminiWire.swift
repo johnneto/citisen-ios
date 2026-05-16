@@ -25,6 +25,11 @@ struct GeminiGenerationConfig: Encodable {
     let responseSchema: GeminiSchema
     let temperature: Double
     let maxOutputTokens: Int
+    let thinkingConfig: GeminiThinkingConfig?
+}
+
+struct GeminiThinkingConfig: Encodable {
+    let thinkingBudget: Int
 }
 
 struct GeminiSchema: Encodable {
@@ -62,6 +67,7 @@ struct GeminiResponse: Decodable {
 
 struct GeminiCandidate: Decodable {
     let content: GeminiCandidateContent?
+    let finishReason: String?
 }
 
 struct GeminiCandidateContent: Decodable {

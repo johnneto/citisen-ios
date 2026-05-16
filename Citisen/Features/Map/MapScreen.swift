@@ -139,6 +139,10 @@ struct MapScreen: View {
 
     private func bottomSection(_ vm: MapViewModel) -> some View {
         VStack(spacing: Spacing.sm) {
+            if case .streaming = vm.phase {
+                StreamingSpotsPill(mode: prefs.activeMode)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             phaseBanner(vm)
                 .animation(.easeInOut(duration: 0.25), value: vm.phase)
             HStack {
@@ -244,6 +248,15 @@ private struct SearchThisAreaPill: View {
         }
         .liquidGlass(corner: 22, strength: .regular, interactive: true)
         .padding(.horizontal, 12)
+    }
+}
+
+private struct StreamingSpotsPill: View {
+    let mode: TravelMode
+
+    var body: some View {
+        LiquidGlassLoader(mode: mode, label: "Finding more spots…", size: 16)
+            .accessibilityLabel("Finding more spots")
     }
 }
 

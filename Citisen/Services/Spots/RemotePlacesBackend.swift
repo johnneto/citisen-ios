@@ -36,12 +36,13 @@ final class RemotePlacesBackend: PlacesBackend {
             return cached.places
         }
 
+        let range = mode.suggestionCountRange
         let curated = try await gemini.curatedSpots(
             city: city,
             mode: mode,
             viewport: effectiveViewport,
-            minCount: AppConfig.Spots.minSpotsPerRequest,
-            maxCount: AppConfig.Spots.maxSpotsPerRequest
+            minCount: range.min,
+            maxCount: range.max
         )
         try Task.checkCancellation()
 
@@ -65,6 +66,37 @@ final class RemotePlacesBackend: PlacesBackend {
         return resolved
     }
 
+    func streamSpots(
+        city: City,
+        mode: TravelMode,
+        viewport: Viewport?,
+        forceRefresh: Bool
+    ) -> AsyncThrowingStream<Place, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                do {
+                    try await self.runStream(
+                        city: city,
+                        mode: mode,
+                        viewport: viewport,
+                        forceRefresh: forceRefresh,
+                        continuation: continuation
+                    )
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     func search(query: String, city: City) async -> [Place] {
         await mockFallback.search(query: query, city: city)
     }
@@ -79,6 +111,81 @@ final class RemotePlacesBackend: PlacesBackend {
     }
 
     // MARK: - Internals
+
+    private func runStream(
+        city: City,
+        mode: TravelMode,
+        viewport: Viewport?,
+        forceRefresh: Bool,
+        continuation: AsyncThrowingStream<Place, Error>.Continuation
+    ) async throws {
+        let effectiveViewport = viewport ?? defaultViewport(for: city)
+        let key = cacheKey(cityId: city.id, mode: mode)
+
+        if !forceRefresh,
+           let cached = cache.loadEntry(key: key),
+           viewportMatchesCache(requested: effectiveViewport, cached: cached) {
+            AppLog.places.debug("SpotsCache hit for \(key, privacy: .public) (stream)")
+            for place in cached.places {
+                continuation.yield(place)
+            }
+            return
+        }
+
+        let range = mode.suggestionCountRange
+        let curated = try await gemini.curatedSpots(
+            city: city,
+            mode: mode,
+            viewport: effectiveViewport,
+            minCount: range.min,
+            maxCount: range.max
+        )
+        try Task.checkCancellation()
+
+        guard !curated.isEmpty else {
+            throw SpotsError.aiUnavailable("Gemini returned no spots.")
+        }
+
+        var resolved: [Place] = []
+        try await withThrowingTaskGroup(of: Place?.self) { group in
+            let concurrency = AppConfig.Spots.placesConcurrency
+            var iterator = curated.makeIterator()
+            var inFlight = 0
+
+            for _ in 0..<concurrency {
+                if let next = iterator.next() {
+                    group.addTask { [self] in
+                        try await self.resolveOne(next, city: city, mode: mode, viewport: effectiveViewport)
+                    }
+                    inFlight += 1
+                }
+            }
+
+            while inFlight > 0 {
+                try Task.checkCancellation()
+                if let place = try await group.next() {
+                    if let place {
+                        resolved.append(place)
+                        cache.savePlace(place)
+                        continuation.yield(place)
+                    }
+                    inFlight -= 1
+                    if let next = iterator.next() {
+                        group.addTask { [self] in
+                            try await self.resolveOne(next, city: city, mode: mode, viewport: effectiveViewport)
+                        }
+                        inFlight += 1
+                    }
+                }
+            }
+        }
+
+        if resolved.isEmpty {
+            throw SpotsError.aiUnavailable("No spots could be resolved on Google Places.")
+        }
+
+        cache.saveList(key: key, places: resolved, viewport: effectiveViewport)
+    }
 
     private func resolvePlaces(
         curated: [CuratedSpot],
@@ -174,7 +281,7 @@ final class RemotePlacesBackend: PlacesBackend {
         let cachedRadius = max(cached.viewportRadiusKm, 0.01)
         let requestedRadius = max(requested.radiusKm, 0.01)
         let ratio = max(requestedRadius / cachedRadius, cachedRadius / requestedRadius)
-        return ratio <= 1.5
+        return ratio <= AppConfig.Spots.cacheReuseRadiusRatio
     }
 
     private func defaultViewport(for city: City) -> Viewport {

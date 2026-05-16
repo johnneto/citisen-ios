@@ -27,6 +27,34 @@ final class PlacesService {
         return places
     }
 
+    func streamSpots(
+        city: City,
+        mode: TravelMode,
+        viewport: Viewport?,
+        forceRefresh: Bool
+    ) -> AsyncThrowingStream<Place, Error> {
+        let upstream = backend.streamSpots(
+            city: city,
+            mode: mode,
+            viewport: viewport,
+            forceRefresh: forceRefresh
+        )
+        return AsyncThrowingStream { continuation in
+            let task = Task { @MainActor [weak self] in
+                do {
+                    for try await place in upstream {
+                        self?.snapshot[place.id] = place
+                        continuation.yield(place)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     func search(query: String, city: City) async -> [Place] {
         let results = await backend.search(query: query, city: city)
         ingest(results)

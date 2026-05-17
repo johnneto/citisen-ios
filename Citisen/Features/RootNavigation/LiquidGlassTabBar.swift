@@ -7,6 +7,10 @@ struct LiquidGlassTabBar: View {
     private var router
 
     @Namespace private var selectionRingNS
+    @State private var tabBarWidth: CGFloat = 0
+
+    private static let coordinateSpaceName = "LiquidGlassTabBar"
+    private static let horizontalInset: CGFloat = 4
 
     var body: some View {
         HStack(spacing: 0) {
@@ -14,9 +18,42 @@ struct LiquidGlassTabBar: View {
                 tab(for: mode, index: index)
             }
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, Self.horizontalInset)
         .frame(height: 76)
-        .liquidGlassPill(strength: .thin, interactive: true)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { tabBarWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, newWidth in
+                        tabBarWidth = newWidth
+                    }
+            }
+        )
+        .coordinateSpace(name: Self.coordinateSpaceName)
+        .simultaneousGesture(slideGesture)
+        .liquidGlassPill(strength: .regular, interactive: true)
+    }
+
+    private var slideGesture: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .named(Self.coordinateSpaceName))
+            .onChanged { value in
+                updateIndex(forDragLocationX: value.location.x)
+            }
+    }
+
+    private func updateIndex(forDragLocationX x: CGFloat) {
+        let count = prefs.tabBarOrder.count
+        guard count > 0, tabBarWidth > 0 else { return }
+        let innerWidth = max(tabBarWidth - Self.horizontalInset * 2, 1)
+        let innerX = min(max(x - Self.horizontalInset, 0), innerWidth)
+        let raw = Int((innerX / innerWidth) * CGFloat(count))
+        let index = min(max(raw, 0), count - 1)
+        guard prefs.activeModeIndex != index else { return }
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+        @Bindable var prefs = prefs
+        prefs.activeModeIndex = index
     }
 
     private func tab(for mode: TravelMode, index: Int) -> some View {
@@ -26,31 +63,22 @@ struct LiquidGlassTabBar: View {
         return Button {
             tap(index: index)
         } label: {
-            ZStack {
-                if isActive {
-                    RoundedRectangle(cornerRadius: 34, style: .continuous)
-                        .fill(mode.color.opacity(0.20))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                                .strokeBorder(mode.color.opacity(0.45), lineWidth: 1.25)
-                        )
-                        .shadow(color: mode.color.opacity(0.35), radius: 6, x: 0, y: 2)
-                        .padding(2)
-                        .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
-                }
-
-                VStack(spacing: 2) {
-                    Image(systemName: mode.iconSymbol)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(isActive ? mode.color : AppColor.textSecondary)
-                    Text(mode.displayName.uppercased())
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(isActive ? mode.color : AppColor.textSecondary)
-                }
+            VStack(spacing: 2) {
+                Image(systemName: mode.iconSymbol)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(isActive ? AppColor.textPrimary : AppColor.textSecondary)
+                Text(mode.displayName.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(isActive ? AppColor.textPrimary : AppColor.textSecondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
+            .background {
+                if isActive {
+                    activeHighlight(for: mode)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(mode.displayName) mode")
@@ -62,7 +90,38 @@ struct LiquidGlassTabBar: View {
                     longPress(mode: mode)
                 }
         )
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: prefs.activeModeIndex)
+        .animation(
+            .interactiveSpring(response: 0.3, dampingFraction: 0.75, blendDuration: 0.2),
+            value: prefs.activeModeIndex
+        )
+    }
+
+    @ViewBuilder
+    private func activeHighlight(for mode: TravelMode) -> some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(
+                    Glass.regular.tint(mode.color.opacity(0.28)).interactive(),
+                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
+                )
+                .padding(.vertical, 4)
+                .padding(.horizontal, 0)
+                .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
+        } else {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.dynamic(
+                    light: mode.color.opacity(0.22),
+                    dark: mode.color.opacity(0.38)
+                ))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(mode.color.opacity(0.55), lineWidth: 1)
+                )
+                .shadow(color: mode.color.opacity(0.30), radius: 8, x: 0, y: 3)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 0)
+                .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
+        }
     }
 
     private func tap(index: Int) {

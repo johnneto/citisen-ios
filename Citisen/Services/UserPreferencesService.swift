@@ -14,6 +14,8 @@ final class UserPreferencesService {
         static let recentSearches = "citisen.recentSearches"
         static let activeCityId = "citisen.activeCityId"
         static let locationRequested = "citisen.locationRequested"
+        static let lastSessionCityId = "citisen.lastSessionCityId"
+        static let lastDynamicCity = "citisen.lastDynamicCity"
     }
 
     enum AppearanceOverride: String, CaseIterable, Codable, Identifiable {
@@ -73,6 +75,26 @@ final class UserPreferencesService {
         didSet { defaults.set(locationRequested, forKey: Keys.locationRequested) }
     }
 
+    /// City id used during the most recent successful spot fetch. Compared against
+    /// the user's current city on launch to decide whether cached spots can be reused
+    /// without calling Gemini.
+    var lastSessionCityId: String? {
+        didSet { defaults.set(lastSessionCityId, forKey: Keys.lastSessionCityId) }
+    }
+
+    /// Last reverse-geocoded dynamic city. Restored on launch so `CityService.activeCity`
+    /// is correct before the geocoder finishes resolving the user's current coordinate —
+    /// otherwise cache lookups race against a hardcoded fallback id.
+    var lastDynamicCity: City? {
+        didSet {
+            if let city = lastDynamicCity, let data = try? JSONEncoder().encode(city) {
+                defaults.set(data, forKey: Keys.lastDynamicCity)
+            } else {
+                defaults.removeObject(forKey: Keys.lastDynamicCity)
+            }
+        }
+    }
+
     var user: UserProfile = .placeholder
 
     private let defaults: UserDefaults
@@ -85,6 +107,14 @@ final class UserPreferencesService {
         self.notificationsEnabled = defaults.bool(forKey: Keys.notificationsEnabled)
         self.activeCityId = defaults.string(forKey: Keys.activeCityId) ?? City.tallinn.id
         self.locationRequested = defaults.bool(forKey: Keys.locationRequested)
+        self.lastSessionCityId = defaults.string(forKey: Keys.lastSessionCityId)
+
+        if let data = defaults.data(forKey: Keys.lastDynamicCity),
+           let decoded = try? JSONDecoder().decode(City.self, from: data) {
+            self.lastDynamicCity = decoded
+        } else {
+            self.lastDynamicCity = nil
+        }
 
         if let raw = defaults.string(forKey: Keys.darkMode),
            let override = AppearanceOverride(rawValue: raw) {

@@ -87,8 +87,13 @@ final class MapViewModel {
                     }
                 }
                 if Task.isCancelled { return }
-                self.phase = .loaded
-                self.lastFetchCenter = viewport.center
+                if collected.isEmpty {
+                    self.phase = .error("No spots found here. Try a different mode or area.")
+                } else {
+                    self.phase = .loaded
+                    self.lastFetchCenter = viewport.center
+                    self.prefs.lastSessionCityId = city.id
+                }
             } catch is CancellationError {
                 return
             } catch let spotsError as SpotsError {
@@ -99,6 +104,24 @@ final class MapViewModel {
                 self.phase = .error(error.localizedDescription)
             }
         }
+    }
+
+    /// Cold-start entry point. If the user is still in the same city as the previous
+    /// session and a valid cached spot list exists, restore it immediately without
+    /// calling Gemini. Otherwise fall through to a normal `reload()`.
+    func loadInitial() {
+        let city = cityService.activeCity
+        let mode = prefs.activeMode
+
+        if prefs.lastSessionCityId == city.id,
+           let cached = placesService.cachedSpots(city: city, mode: mode) {
+            places = cached
+            phase = .loaded
+            lastFetchCenter = currentViewport(for: city).center
+            return
+        }
+
+        reload()
     }
 
     func toggleSubFilter(_ filter: SubFilter) {
@@ -140,7 +163,7 @@ final class MapViewModel {
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         ))
         cityService.updateFromCoordinate(coord)
-        reload()
+        loadInitial()
     }
 
     func recenterOnCity() {

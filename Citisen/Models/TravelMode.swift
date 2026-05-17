@@ -32,7 +32,7 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .standard: return "The best of the city — AI curated mix."
         case .food: return "Authentic local kitchens, not tourist traps."
         case .nature: return "Parks, coasts, quiet green escapes."
-        case .turbo: return "Quick hits when you only have a day."
+        case .turbo: return "Quick hits when you don't have much time."
         case .history: return "Details of the past worth a detour."
         case .sports: return "Pitches, trails, adrenaline venues."
         case .nightlife: return "Bars, clubs, late-night corners locals love."
@@ -82,11 +82,11 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
     var suggestionCountRange: (min: Int, max: Int) {
         switch self {
         case .turbo:
-            return (10, 12)
+            return (15, 25)
         case .nature, .sports:
             return (10, 20)
         case .history, .art:
-            return (20, 28)
+            return (20, 30)
         case .standard, .food, .cafes, .nightlife:
             return (AppConfig.Spots.minSpotsPerRequest, AppConfig.Spots.maxSpotsPerRequest)
         }
@@ -116,8 +116,10 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .turbo:
             return """
             Pick spots that are a must-see when quickly visiting the region, \
-            like iconic viewpoints, famous landmarks, parks and any place that is most relevant \
+            like iconic buildings, statues, museums, famous landmarks, parks and any place that is most relevant \
             considering a short trip.
+            Skip hotels, global chains, generic or common suggestions, but only places that are essential \
+            to see for tourists visiting the city.
             """
         case .history:
             return """

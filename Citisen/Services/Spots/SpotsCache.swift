@@ -60,6 +60,7 @@ final class SpotsCache {
     }
 
     func saveList(key: String, places: [Place], viewport: Viewport) {
+        guard !places.isEmpty else { return }
         let entry = CachedList(
             cachedAt: Date(),
             viewportCenter: Coordinate(

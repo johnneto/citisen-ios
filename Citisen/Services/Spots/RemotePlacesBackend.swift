@@ -31,6 +31,7 @@ final class RemotePlacesBackend: PlacesBackend {
 
         if !forceRefresh,
            let cached = cache.loadEntry(key: key),
+           !cached.places.isEmpty,
            viewportMatchesCache(requested: effectiveViewport, cached: cached) {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public)")
             return cached.places
@@ -110,6 +111,12 @@ final class RemotePlacesBackend: PlacesBackend {
         cache.clearLists(forCityId: cityId)
     }
 
+    func cachedSpots(city: City, mode: TravelMode) -> [Place]? {
+        let key = cacheKey(cityId: city.id, mode: mode)
+        guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
+        return cached.places
+    }
+
     // MARK: - Internals
 
     private func runStream(
@@ -124,6 +131,7 @@ final class RemotePlacesBackend: PlacesBackend {
 
         if !forceRefresh,
            let cached = cache.loadEntry(key: key),
+           !cached.places.isEmpty,
            viewportMatchesCache(requested: effectiveViewport, cached: cached) {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public) (stream)")
             for place in cached.places {

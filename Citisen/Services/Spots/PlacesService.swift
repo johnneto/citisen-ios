@@ -79,6 +79,15 @@ final class PlacesService {
         snapshot = snapshot.filter { $0.value.cityId != cityId }
     }
 
+    /// Returns cached spots for the given city + mode without making any network
+    /// calls, ingesting them into the in-memory snapshot. Used to restore the
+    /// previous session's results on cold start.
+    func cachedSpots(city: City, mode: TravelMode) -> [Place]? {
+        guard let places = backend.cachedSpots(city: city, mode: mode) else { return nil }
+        ingest(places)
+        return places
+    }
+
     private func ingest(_ places: [Place]) {
         for place in places {
             snapshot[place.id] = place

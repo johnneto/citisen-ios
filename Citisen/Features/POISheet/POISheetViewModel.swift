@@ -15,7 +15,15 @@ final class POISheetViewModel {
     init(place: Place, context: ModelContext) {
         self.place = place
         self.savedSpots = SavedSpotsService(context: context)
-        self.currentRating = savedSpots.savedRating(for: place.id)
+        self.currentRating = nil
+    }
+
+    /// Loads the persisted rating for this place. Kept separate from `init` so a
+    /// prefetched neighbour page in `TabView(.page)` doesn't perform a SwiftData
+    /// fetch on the main actor mid-swipe — callers should invoke this *after* the
+    /// gesture has settled.
+    func loadRating() {
+        currentRating = savedSpots.savedRating(for: place.id)
     }
 
     func pick(_ rating: SavedSpotRating) {

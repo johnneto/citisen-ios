@@ -17,6 +17,7 @@ final class CityService {
 
     init(prefs: UserPreferencesService) {
         self.prefs = prefs
+        self.dynamicCity = prefs.lastDynamicCity
     }
 
     var activeCity: City {
@@ -56,21 +57,53 @@ final class CityService {
                 ?? placemark.administrativeArea
                 ?? "Current location"
             let country = placemark.country ?? ""
-            let id = String(format: "dyn_%.2f_%.2f", coord.latitude, coord.longitude)
+            let countryCode = placemark.isoCountryCode ?? ""
+            let id = stableDynamicId(name: name, countryCode: countryCode)
+
+            // Keep the cached city centre stable across small GPS jitter — if the resolved
+            // city id matches what we already have, don't overwrite the (possibly more
+            // representative) previous centre coordinate with this single reading.
+            let centerCoord: Coordinate
+            if let existing = dynamicCity, existing.id == id {
+                centerCoord = existing.center
+            } else {
+                centerCoord = Coordinate(latitude: coord.latitude, longitude: coord.longitude)
+            }
 
             let resolved = City(
                 id: id,
                 name: name,
                 country: country,
                 emojiFlag: "",
-                center: Coordinate(latitude: coord.latitude, longitude: coord.longitude),
+                center: centerCoord,
                 defaultSpanKm: 6
             )
+            let previousId = dynamicCity?.id
             self.dynamicCity = resolved
+            prefs.lastDynamicCity = resolved
+            if previousId != resolved.id {
+                citySelectionEpoch &+= 1
+            }
         } catch is CancellationError {
             return
         } catch {
             AppLog.location.error("Reverse geocode failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func stableDynamicId(name: String, countryCode: String) -> String {
+        let slug = name
+            .lowercased()
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .replacingOccurrences(of: " ", with: "_")
+            .filter { $0.isLetter || $0.isNumber || $0 == "_" }
+        let countrySlug = countryCode.lowercased()
+        if !slug.isEmpty, !countrySlug.isEmpty {
+            return "dyn_\(slug)_\(countrySlug)"
+        }
+        if !slug.isEmpty {
+            return "dyn_\(slug)"
+        }
+        return "dyn_current"
     }
 }

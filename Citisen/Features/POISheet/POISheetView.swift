@@ -31,10 +31,18 @@ struct POISheetView: View {
                 ProgressView()
             }
         }
-        .onAppear {
+        .task(id: place.id) {
+            // Build the VM eagerly so prefetched neighbour pages in TabView(.page)
+            // have content during the swipe — but keep init cheap (no SwiftData fetch).
             if viewModel == nil {
                 viewModel = POISheetViewModel(place: place, context: modelContext)
             }
+            // Defer the SwiftData rating fetch until the gesture has settled. `.task`
+            // is auto-cancelled when the view disappears, so mid-swipe cancellation
+            // is handled by SwiftUI.
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            if Task.isCancelled { return }
+            viewModel?.loadRating()
         }
     }
 

@@ -14,14 +14,14 @@ enum AppConfig {
         static let cacheTTLDays: Double = 30
         static var cacheTTLSeconds: TimeInterval { cacheTTLDays * 86_400 }
         static let minSpotsPerRequest = 20
-        static let maxSpotsPerRequest = 30
+        static let maxSpotsPerRequest = 60
         static let placesConcurrency = 8
         static let searchAreaTriggerMeters: CLLocationDistance = 1_000
         /// How forgiving the cache is when comparing a requested viewport's radius to
         /// the cached one. A ratio of 1.5 means the cache is reused if the new radius
         /// is within ~1.5× larger or smaller. Higher = more cache reuse / fewer Gemini
         /// calls; lower = more frequent refreshes when the user zooms.
-        static let cacheReuseRadiusRatio: Double = 2.0
+        static let cacheReuseRadiusRatio: Double = 10.0
         static let maxPhotosPerPlace = 6
         static let photoMaxWidthPx = 1_200
         static let photoMaxHeightPx = 800

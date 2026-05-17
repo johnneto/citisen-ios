@@ -13,14 +13,12 @@ struct PlacePhotoView: View {
 
     private static let client = GooglePlacesClient()
 
-    private var url: URL? {
-        Self.client.photoMediaURL(name: photoName, maxWidthPx: maxWidthPx, maxHeightPx: maxHeightPx)
-    }
+    @State private var resolvedURL: URL?
 
     var body: some View {
         Group {
-            if let url {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
+            if let resolvedURL {
+                AsyncImage(url: resolvedURL, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
                     switch phase {
                     case .empty:
                         placeholder
@@ -44,6 +42,13 @@ struct PlacePhotoView: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(AppColor.dividerSoft, lineWidth: 0.5)
         )
+        .task(id: photoName) {
+            resolvedURL = Self.client.photoMediaURL(
+                name: photoName,
+                maxWidthPx: maxWidthPx,
+                maxHeightPx: maxHeightPx
+            )
+        }
     }
 
     private var placeholder: some View {

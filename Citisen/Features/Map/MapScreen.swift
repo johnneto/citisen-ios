@@ -16,6 +16,7 @@ struct MapScreen: View {
     private var openURL
 
     @State private var viewModel: MapViewModel?
+    @State private var poiCameraTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -48,7 +49,7 @@ struct MapScreen: View {
                 if locationService.currentLocation != nil {
                     vm.centerOnUserIfAvailable()
                 } else {
-                    vm.reload()
+                    vm.loadInitial()
                 }
             }
         }
@@ -63,13 +64,20 @@ struct MapScreen: View {
             viewModel?.reload()
         }
         .onChange(of: router.poiSelectedId) { _, newValue in
+            // Debounce so that rapid mid-swipe selection changes coalesce into a single
+            // camera animation after the swipe settles — prevents first-swipe stutter.
+            poiCameraTask?.cancel()
             guard let newValue, let vm = viewModel else { return }
-            guard let place = vm.placesService.place(id: newValue) else { return }
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                vm.cameraPosition = .region(MKCoordinateRegion(
-                    center: place.coordinate.clLocation,
-                    span: vm.visibleRegion?.span ?? MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-                ))
+            poiCameraTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                if Task.isCancelled { return }
+                guard let place = vm.placesService.place(id: newValue) else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                    vm.cameraPosition = .region(MKCoordinateRegion(
+                        center: place.coordinate.clLocation,
+                        span: vm.visibleRegion?.span ?? MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                    ))
+                }
             }
         }
     }

@@ -24,4 +24,9 @@ protocol PlacesBackend: AnyObject {
     func resolvePlace(id: UUID) async -> Place?
 
     func clearCache(forCityId cityId: String)
+
+    /// Returns the most recently cached non-empty spot list for the given city + mode,
+    /// ignoring viewport constraints. Used to restore the previous session's results
+    /// on cold start. Returns nil when no valid cache entry exists.
+    func cachedSpots(city: City, mode: TravelMode) -> [Place]?
 }

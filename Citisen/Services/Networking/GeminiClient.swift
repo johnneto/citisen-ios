@@ -81,21 +81,30 @@ final class GeminiClient {
         minCount: Int,
         maxCount: Int
     ) -> String {
-        let lat = String(format: "%.5f", viewport.center.latitude)
-        let lng = String(format: "%.5f", viewport.center.longitude)
-        let radius = String(format: "%.1f", max(viewport.radiusKm, 1.0))
-
         let constraints = [
             "avoid common global chains unless regional",
             "prefer places locals actually use",
-            "mix neighborhoods",
+            "spread results across distinct neighborhoods — do not cluster near one point",
             "avoid duplicates",
             "order the response by relevance with most relevant suggestions first on the list"
         ].joined(separator: ", ")
 
+        let scope = """
+        Suggest between \(minCount) and \(maxCount) \(mode.displayName) highlights across the \
+        entire city of \(city.name) — cover the whole city perimeter (historic core, residential \
+        pockets, emerging areas, outskirts worth the trip), not just one area.
+        """
+
+        let framing = """
+        Treat this as a curated city-wide shortlist of standouts; nearby and radius-based \
+        coverage is handled separately by another system, so focus on the very best of the \
+        city as a whole rather than what is closest to any single point.
+        """
+
         return """
         You are a local travel guide for \(city.name), \(city.country).
-        Suggest between \(minCount) and \(maxCount) \(mode.displayName) spots within ~\(radius) km of (\(lat),\(lng)).
+        \(scope)
+        \(framing)
         \(mode.promptInstructions)
         HARD CONSTRAINTS: \(constraints).
         """

@@ -98,26 +98,38 @@ struct MainTabHostView: View {
         @Bindable var router = router
         let ids = router.poiPlaceIds
 
-        TabView(selection: $router.poiSelectedId) {
-            ForEach(Array(ids.enumerated()), id: \.element) { index, id in
-                Group {
-                    if let place = places.place(id: id) {
-                        POISheetView(
-                            place: place,
-                            pageIndex: ids.count > 1 ? index : nil,
-                            pageCount: ids.count > 1 ? ids.count : nil
-                        )
-                    } else {
-                        VStack {
-                            Text("Place not found").font(.headline17)
+        // Paging ScrollView instead of TabView(.page): UIPageViewController rubber-bands
+        // light/fast flicks back to the current page and loses the gesture mid-animation,
+        // which the user perceives as the page freezing mid-swipe. `.scrollTargetBehavior(.paging)`
+        // commits on translation, so any started drag always lands on a page.
+        GeometryReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(Array(ids.enumerated()), id: \.element) { index, id in
+                        Group {
+                            if let place = places.place(id: id) {
+                                POISheetView(
+                                    place: place,
+                                    pageIndex: ids.count > 1 ? index : nil,
+                                    pageCount: ids.count > 1 ? ids.count : nil
+                                )
+                            } else {
+                                VStack {
+                                    Text("Place not found").font(.headline17)
+                                }
+                                .padding()
+                            }
                         }
-                        .padding()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .id(id)
                     }
                 }
-                .tag(Optional(id))
+                .scrollTargetLayout()
             }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $router.poiSelectedId)
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
+        .ignoresSafeArea(.container, edges: .horizontal)
         .presentationDetents(
             [.height(340), .height(600), .large],
             selection: $router.poiDetent

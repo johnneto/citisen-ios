@@ -203,7 +203,7 @@ struct MapScreen: View {
                 .padding(.horizontal, Spacing.md)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         case .idleNeedsFetch:
-            LoadSuggestionsCard(cityName: cityService.activeCity.name) {
+            LoadSuggestionsCard(cityName: cityService.activeCity.name, travelMode: prefs.activeMode.displayName) {
                 vm.fetchSuggestions()
             }
             .padding(.horizontal, Spacing.md)
@@ -260,6 +260,7 @@ private struct NearMeFAB: View {
 
 private struct LoadSuggestionsCard: View {
     let cityName: String
+    let travelMode: String
     let onLoad: () -> Void
 
     var body: some View {
@@ -270,11 +271,11 @@ private struct LoadSuggestionsCard: View {
                 Text("Discover \(cityName)")
                     .font(.subheadline15.weight(.semibold))
                     .foregroundStyle(AppColor.textPrimary)
-                Text("Tap to load curated suggestions.")
+                Text("Tap to load AI suggestions using \(travelMode) travel mode.")
                     .font(.caption12)
                     .foregroundStyle(AppColor.textSecondary)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
             Button("Load", action: onLoad)
                 .font(.footnote13.weight(.semibold))
                 .tint(BrandColor.sand)

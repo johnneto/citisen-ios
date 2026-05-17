@@ -5,7 +5,7 @@ import SwiftUI
 /// a rotating gradient arc and a short label.
 struct LiquidGlassLoader: View {
     let mode: TravelMode
-    var label: String = "Curating spots…"
+    var label: String = "Generating suggestions…"
     var size: CGFloat = 28
 
     @State private var rotation: Double = 0
@@ -14,6 +14,8 @@ struct LiquidGlassLoader: View {
         HStack(spacing: Spacing.sm) {
             spinner
                 .frame(width: size, height: size)
+            Image(systemName: "sparkles")
+                .foregroundStyle(mode.color)
             Text(label)
                 .font(size > 40 ? .headline17.weight(.semibold) : .subheadline15.weight(.semibold))
                 .foregroundStyle(AppColor.textPrimary)
@@ -72,7 +74,7 @@ struct MapLoadingOverlay: View {
             LiquidGlassLoader(mode: mode, size: 36)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Curating spots")
+        .accessibilityLabel("Generating suggestions")
     }
 }
 

@@ -40,6 +40,46 @@ struct PlaceV1: Decodable {
     let reviews: [ReviewV1]?
     let editorialSummary: LocalizedText?
     let photos: [PhotoV1]?
+    let addressComponents: [AddressComponentV1]?
+}
+
+struct AddressComponentV1: Decodable {
+    let longText: String?
+    let shortText: String?
+    let types: [String]?
+}
+
+// MARK: - Autocomplete (New)
+
+struct AutocompleteRequest: Encodable {
+    let input: String
+    let sessionToken: String
+    let includedPrimaryTypes: [String]?
+    let languageCode: String?
+}
+
+struct AutocompleteResponse: Decodable {
+    let suggestions: [AutocompleteSuggestion]?
+}
+
+struct AutocompleteSuggestion: Decodable {
+    let placePrediction: PlacePrediction?
+}
+
+struct PlacePrediction: Decodable {
+    let placeId: String?
+    let text: FormattableText?
+    let structuredFormat: StructuredFormat?
+    let types: [String]?
+}
+
+struct FormattableText: Decodable {
+    let text: String?
+}
+
+struct StructuredFormat: Decodable {
+    let mainText: FormattableText?
+    let secondaryText: FormattableText?
 }
 
 struct PhotoV1: Decodable {

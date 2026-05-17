@@ -31,8 +31,7 @@ final class RemotePlacesBackend: PlacesBackend {
 
         if !forceRefresh,
            let cached = cache.loadEntry(key: key),
-           !cached.places.isEmpty,
-           viewportMatchesCache(requested: effectiveViewport, cached: cached) {
+           !cached.places.isEmpty {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public)")
             return cached.places
         }
@@ -41,7 +40,6 @@ final class RemotePlacesBackend: PlacesBackend {
         let curated = try await gemini.curatedSpots(
             city: city,
             mode: mode,
-            viewport: effectiveViewport,
             minCount: range.min,
             maxCount: range.max
         )
@@ -131,8 +129,7 @@ final class RemotePlacesBackend: PlacesBackend {
 
         if !forceRefresh,
            let cached = cache.loadEntry(key: key),
-           !cached.places.isEmpty,
-           viewportMatchesCache(requested: effectiveViewport, cached: cached) {
+           !cached.places.isEmpty {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public) (stream)")
             for place in cached.places {
                 continuation.yield(place)
@@ -144,7 +141,6 @@ final class RemotePlacesBackend: PlacesBackend {
         let curated = try await gemini.curatedSpots(
             city: city,
             mode: mode,
-            viewport: effectiveViewport,
             minCount: range.min,
             maxCount: range.max
         )
@@ -272,24 +268,6 @@ final class RemotePlacesBackend: PlacesBackend {
 
     private func cacheKey(cityId: String, mode: TravelMode) -> String {
         "\(cityId)_\(mode.rawValue)"
-    }
-
-    private func viewportMatchesCache(requested: Viewport, cached: CachedList) -> Bool {
-        let cachedCenter = CLLocation(
-            latitude: cached.viewportCenter.latitude,
-            longitude: cached.viewportCenter.longitude
-        )
-        let requestedCenter = CLLocation(
-            latitude: requested.center.latitude,
-            longitude: requested.center.longitude
-        )
-        let distance = requestedCenter.distance(from: cachedCenter)
-        guard distance <= AppConfig.Spots.searchAreaTriggerMeters else { return false }
-
-        let cachedRadius = max(cached.viewportRadiusKm, 0.01)
-        let requestedRadius = max(requested.radiusKm, 0.01)
-        let ratio = max(requestedRadius / cachedRadius, cachedRadius / requestedRadius)
-        return ratio <= AppConfig.Spots.cacheReuseRadiusRatio
     }
 
     private func defaultViewport(for city: City) -> Viewport {

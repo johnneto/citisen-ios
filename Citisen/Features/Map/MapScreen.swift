@@ -17,6 +17,7 @@ struct MapScreen: View {
 
     @State private var viewModel: MapViewModel?
     @State private var poiCameraTask: Task<Void, Never>?
+    @State private var welcomeCity: City?
 
     var body: some View {
         ZStack {
@@ -31,8 +32,15 @@ struct MapScreen: View {
             } else {
                 Color.clear
             }
+
+            if let welcomeCity {
+                CityWelcomeOverlay(city: welcomeCity)
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel?.phase)
+        .animation(.easeInOut(duration: 0.25), value: welcomeCity?.id)
         .onAppear {
             if viewModel == nil {
                 let vm = MapViewModel(
@@ -57,11 +65,10 @@ struct MapScreen: View {
             viewModel?.centerOnUserIfAvailable()
         }
         .onChange(of: cityService.citySelectionEpoch) { _, _ in
-            viewModel?.recenterOnCity()
-            viewModel?.reload()
+            handleCityChange()
         }
         .onChange(of: prefs.activeMode) { _, _ in
-            viewModel?.reload()
+            viewModel?.applyCacheOrIdle()
         }
         .onChange(of: router.poiSelectedId) { _, newValue in
             // Debounce so that rapid mid-swipe selection changes coalesce into a single
@@ -140,18 +147,9 @@ struct MapScreen: View {
             )
             .padding(.horizontal, 12)
 
-            if vm.shouldOfferSearchThisArea() {
-                SearchThisAreaPill(
-                    onSearch: { vm.reload(forceRefresh: false) },
-                    onForceRefresh: { vm.reload(forceRefresh: true) }
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
             SubFilterBar(mode: prefs.activeMode, active: $vm.activeSubFilters)
         }
         .padding(.top, 54) // below safe area
-        .animation(.easeInOut(duration: 0.2), value: vm.shouldOfferSearchThisArea())
     }
 
     private func bottomSection(_ vm: MapViewModel) -> some View {
@@ -201,15 +199,42 @@ struct MapScreen: View {
     private func phaseBanner(_ vm: MapViewModel) -> some View {
         switch vm.phase {
         case .error(let message):
-            ErrorBanner(message: message) { vm.reload(forceRefresh: true) }
+            ErrorBanner(message: message) { vm.fetchSuggestions(forceRefresh: true) }
                 .padding(.horizontal, Spacing.md)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+        case .idleNeedsFetch:
+            LoadSuggestionsCard(cityName: cityService.activeCity.name) {
+                vm.fetchSuggestions()
+            }
+            .padding(.horizontal, Spacing.md)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         case .loaded where vm.places.isEmpty:
-            EmptyResultsCard { vm.reload(forceRefresh: true) }
+            EmptyResultsCard { vm.fetchSuggestions(forceRefresh: true) }
                 .padding(.horizontal, Spacing.md)
                 .transition(.opacity)
         default:
             EmptyView()
+        }
+    }
+
+    private func handleCityChange() {
+        guard let vm = viewModel else { return }
+        let newCity = cityService.activeCity
+        let shouldWelcome = newCity.id != prefs.lastSessionCityId
+        vm.handleCityChange()
+        if shouldWelcome {
+            showWelcome(for: newCity)
+            prefs.lastSessionCityId = newCity.id
+        }
+    }
+
+    private func showWelcome(for city: City) {
+        welcomeCity = city
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if welcomeCity?.id == city.id {
+                welcomeCity = nil
+            }
         }
     }
 }
@@ -233,38 +258,30 @@ private struct NearMeFAB: View {
     }
 }
 
-private struct SearchThisAreaPill: View {
-    let onSearch: () -> Void
-    let onForceRefresh: () -> Void
+private struct LoadSuggestionsCard: View {
+    let cityName: String
+    let onLoad: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Button(action: onSearch) {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search this area")
-                }
-                .font(.subheadline15.weight(.semibold))
-                .foregroundStyle(AppColor.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-            }
-            .buttonStyle(.pressableScale)
-
-            Divider().frame(height: 18)
-
-            Button(action: onForceRefresh) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 14, weight: .semibold))
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(BrandColor.sand)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Discover \(cityName)")
+                    .font(.subheadline15.weight(.semibold))
                     .foregroundStyle(AppColor.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                Text("Tap to load curated suggestions.")
+                    .font(.caption12)
+                    .foregroundStyle(AppColor.textSecondary)
             }
-            .buttonStyle(.pressableScale)
-            .accessibilityLabel("Force refresh")
+            Spacer(minLength: 8)
+            Button("Load", action: onLoad)
+                .font(.footnote13.weight(.semibold))
+                .tint(BrandColor.sand)
         }
-        .liquidGlass(corner: 22, strength: .regular, interactive: true)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .liquidGlass(corner: 16, strength: .regular, interactive: true)
     }
 }
 

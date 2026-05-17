@@ -20,6 +20,9 @@ struct CitisenApp: App {
     init() {
         KeychainService.shared.bootstrap(from: AppSecrets.fromBundle())
         let prefs = UserPreferencesService()
+        MainActor.assumeIsolated {
+            CacheMigrator.runIfNeeded(prefs: prefs)
+        }
         _prefs = State(initialValue: prefs)
         _cityService = State(initialValue: CityService(prefs: prefs))
     }

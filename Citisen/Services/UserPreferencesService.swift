@@ -16,7 +16,11 @@ final class UserPreferencesService {
         static let locationRequested = "citisen.locationRequested"
         static let lastSessionCityId = "citisen.lastSessionCityId"
         static let lastDynamicCity = "citisen.lastDynamicCity"
+        static let recentCities = "citisen.recentCities"
+        static let spotsCacheMigratedV2 = "citisen.spotsCacheMigratedV2"
     }
+
+    static let maxRecentCities = 10
 
     enum AppearanceOverride: String, CaseIterable, Codable, Identifiable {
         case system, light, dark
@@ -95,6 +99,21 @@ final class UserPreferencesService {
         }
     }
 
+    /// Cities the user has chosen via the switcher (recents-first). Used as the only
+    /// source of cities in the switcher UI; capped at `maxRecentCities`.
+    var recentCities: [City] {
+        didSet {
+            if let data = try? JSONEncoder().encode(recentCities) {
+                defaults.set(data, forKey: Keys.recentCities)
+            }
+        }
+    }
+
+    /// One-shot flag for the legacy on-disk cache migration (hardcoded ids → `dyn_` ids).
+    var spotsCacheMigratedV2: Bool {
+        didSet { defaults.set(spotsCacheMigratedV2, forKey: Keys.spotsCacheMigratedV2) }
+    }
+
     var user: UserProfile = .placeholder
 
     private let defaults: UserDefaults
@@ -105,15 +124,23 @@ final class UserPreferencesService {
         self.activeModeIndex = defaults.object(forKey: Keys.activeModeIndex) as? Int ?? 2
         self.metricUnits = defaults.object(forKey: Keys.metricUnits) as? Bool ?? true
         self.notificationsEnabled = defaults.bool(forKey: Keys.notificationsEnabled)
-        self.activeCityId = defaults.string(forKey: Keys.activeCityId) ?? City.tallinn.id
+        self.activeCityId = defaults.string(forKey: Keys.activeCityId) ?? ""
         self.locationRequested = defaults.bool(forKey: Keys.locationRequested)
         self.lastSessionCityId = defaults.string(forKey: Keys.lastSessionCityId)
+        self.spotsCacheMigratedV2 = defaults.bool(forKey: Keys.spotsCacheMigratedV2)
 
         if let data = defaults.data(forKey: Keys.lastDynamicCity),
            let decoded = try? JSONDecoder().decode(City.self, from: data) {
             self.lastDynamicCity = decoded
         } else {
             self.lastDynamicCity = nil
+        }
+
+        if let data = defaults.data(forKey: Keys.recentCities),
+           let decoded = try? JSONDecoder().decode([City].self, from: data) {
+            self.recentCities = decoded
+        } else {
+            self.recentCities = []
         }
 
         if let raw = defaults.string(forKey: Keys.darkMode),

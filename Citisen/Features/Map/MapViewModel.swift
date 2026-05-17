@@ -8,6 +8,9 @@ import SwiftUI
 final class MapViewModel {
     enum Phase: Equatable {
         case idle
+        /// No cached spots for the active city — the empty-state CTA invites the
+        /// user to explicitly fetch suggestions (no automatic Gemini call).
+        case idleNeedsFetch
         case loading
         case streaming
         case loaded
@@ -20,7 +23,6 @@ final class MapViewModel {
 
     private(set) var places: [Place] = []
     private(set) var phase: Phase = .idle
-    private(set) var lastFetchCenter: CLLocationCoordinate2D?
     var visibleRegion: MKCoordinateRegion?
 
     let placesService: PlacesService
@@ -58,13 +60,12 @@ final class MapViewModel {
         }
     }
 
-    func reload(forceRefresh: Bool = false) {
+    /// User-initiated fetch (empty-state CTA, retry button). Streams from the
+    /// backend, which calls Gemini when no cache is available.
+    func fetchSuggestions(forceRefresh: Bool = false) {
         loadTask?.cancel()
         let city = cityService.activeCity
         let mode = prefs.activeMode
-        let viewport = currentViewport(for: city)
-
-        cityService.updateFromCoordinate(viewport.center)
 
         phase = .loading
         places = []
@@ -73,7 +74,7 @@ final class MapViewModel {
             let stream = self.placesService.streamSpots(
                 city: city,
                 mode: mode,
-                viewport: viewport,
+                viewport: nil,
                 forceRefresh: forceRefresh
             )
             var collected: [Place] = []
@@ -91,7 +92,6 @@ final class MapViewModel {
                     self.phase = .error("No spots found here. Try a different mode or area.")
                 } else {
                     self.phase = .loaded
-                    self.lastFetchCenter = viewport.center
                     self.prefs.lastSessionCityId = city.id
                 }
             } catch is CancellationError {
@@ -106,22 +106,38 @@ final class MapViewModel {
         }
     }
 
-    /// Cold-start entry point. If the user is still in the same city as the previous
-    /// session and a valid cached spot list exists, restore it immediately without
-    /// calling Gemini. Otherwise fall through to a normal `reload()`.
+    /// Cold-start entry point. Loads cached spots for the active city/mode if
+    /// available, otherwise sits in `idleNeedsFetch` waiting for the user to tap
+    /// the empty-state CTA. Never auto-triggers a Gemini call.
     func loadInitial() {
+        applyCacheOrIdle()
+    }
+
+    /// Called when the active city changes (switcher tap, search result, or a
+    /// reverse-geocode that resolved a different city). Recenters the camera on
+    /// the new city, cancels any in-flight fetch, and surfaces cached spots when
+    /// available — otherwise asks the user to fetch.
+    func handleCityChange() {
+        loadTask?.cancel()
+        recenterOnCity()
+        applyCacheOrIdle()
+    }
+
+    func applyCacheOrIdle() {
+        // Cancel any in-flight load — otherwise a prior mode's stream can yield
+        // after this call, flipping phase back to .streaming and hiding the
+        // empty-state CTA the user expects to see after switching modes.
+        loadTask?.cancel()
+        loadTask = nil
         let city = cityService.activeCity
         let mode = prefs.activeMode
-
-        if prefs.lastSessionCityId == city.id,
-           let cached = placesService.cachedSpots(city: city, mode: mode) {
+        if let cached = placesService.cachedSpots(city: city, mode: mode), !cached.isEmpty {
             places = cached
             phase = .loaded
-            lastFetchCenter = currentViewport(for: city).center
             return
         }
-
-        reload()
+        places = []
+        phase = .idleNeedsFetch
     }
 
     func toggleSubFilter(_ filter: SubFilter) {
@@ -163,7 +179,9 @@ final class MapViewModel {
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         ))
         cityService.updateFromCoordinate(coord)
-        loadInitial()
+        // Don't call loadInitial here — the citySelectionEpoch onChange in
+        // MapScreen will call handleCityChange() once the geocode resolves.
+        applyCacheOrIdle()
     }
 
     func recenterOnCity() {
@@ -175,24 +193,5 @@ final class MapViewModel {
                 longitudeDelta: city.defaultSpanKm / 111
             )
         ))
-    }
-
-    func shouldOfferSearchThisArea() -> Bool {
-        guard let region = visibleRegion, let last = lastFetchCenter else { return false }
-        let distance = CLLocation(latitude: region.center.latitude, longitude: region.center.longitude)
-            .distance(from: CLLocation(latitude: last.latitude, longitude: last.longitude))
-        return distance > AppConfig.Spots.searchAreaTriggerMeters
-    }
-
-    private func currentViewport(for city: City) -> Viewport {
-        if let region = visibleRegion {
-            return Viewport(region: region)
-        }
-        let delta = city.defaultSpanKm / 111
-        return Viewport(
-            center: city.center.clLocation,
-            latitudeDelta: delta,
-            longitudeDelta: delta
-        )
     }
 }

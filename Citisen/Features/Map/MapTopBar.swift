@@ -25,10 +25,14 @@ struct MapTopBar: View {
                     Text(cityName)
                         .font(.headline17)
                         .foregroundStyle(AppColor.textPrimary)
+                        .lineLimit(1)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(AppColor.textSecondary)
                 }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.pressableScale)
             .accessibilityLabel("Change city")

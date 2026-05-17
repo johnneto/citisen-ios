@@ -16,15 +16,16 @@ enum AppConfig {
         static let minSpotsPerRequest = 20
         static let maxSpotsPerRequest = 60
         static let placesConcurrency = 8
-        static let searchAreaTriggerMeters: CLLocationDistance = 1_000
-        /// How forgiving the cache is when comparing a requested viewport's radius to
-        /// the cached one. A ratio of 1.5 means the cache is reused if the new radius
-        /// is within ~1.5× larger or smaller. Higher = more cache reuse / fewer Gemini
-        /// calls; lower = more frequent refreshes when the user zooms.
-        static let cacheReuseRadiusRatio: Double = 10.0
         static let maxPhotosPerPlace = 6
         static let photoMaxWidthPx = 1_200
         static let photoMaxHeightPx = 800
+    }
+
+    enum CitySearch {
+        /// Debounce window before firing an autocomplete request as the user types.
+        static let debounceMilliseconds: Int = 250
+        /// Default span (km) used to recenter the camera on a freshly-selected city.
+        static let defaultSpanKm: Double = 8
     }
 
     enum Endpoints {
@@ -36,6 +37,7 @@ enum AppConfig {
 
         static let placesBase = "https://places.googleapis.com/v1"
         static let placesSearchText = "\(placesBase)/places:searchText"
+        static let placesAutocomplete = "\(placesBase)/places:autocomplete"
         static let placesDetailsBase = "\(placesBase)/places"
 
         private static let placeFieldPaths = [
@@ -50,6 +52,12 @@ enum AppConfig {
             .map { "places.\($0)" }
             .joined(separator: ",")
         static let placeDetailsFieldMask = placeFieldPaths.joined(separator: ",")
+
+        /// Field mask for the lighter city-details payload used after autocomplete
+        /// selection — only the fields needed to build a `City`.
+        static let cityDetailsFieldMask = [
+            "id", "displayName", "location", "addressComponents", "formattedAddress"
+        ].joined(separator: ",")
     }
 
     enum Secrets {

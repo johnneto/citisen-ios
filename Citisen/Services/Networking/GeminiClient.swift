@@ -14,7 +14,6 @@ final class GeminiClient {
     func curatedSpots(
         city: City,
         mode: TravelMode,
-        viewport: Viewport,
         minCount: Int,
         maxCount: Int
     ) async throws -> [CuratedSpot] {
@@ -28,7 +27,7 @@ final class GeminiClient {
             throw SpotsError.aiUnavailable("Bad Gemini URL")
         }
 
-        let prompt = buildPrompt(city: city, mode: mode, viewport: viewport, minCount: minCount, maxCount: maxCount)
+        let prompt = buildPrompt(city: city, mode: mode, minCount: minCount, maxCount: maxCount)
         let body = GeminiRequest(
             contents: [GeminiContent(role: "user", parts: [GeminiPart(text: prompt)])],
             generationConfig: GeminiGenerationConfig(
@@ -77,7 +76,6 @@ final class GeminiClient {
     private func buildPrompt(
         city: City,
         mode: TravelMode,
-        viewport: Viewport,
         minCount: Int,
         maxCount: Int
     ) -> String {
@@ -102,6 +100,7 @@ final class GeminiClient {
         """
 
         return """
+        Target city: \(city.name), \(city.country).
         You are a local travel guide for \(city.name), \(city.country).
         \(scope)
         \(framing)

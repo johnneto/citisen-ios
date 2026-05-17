@@ -6,10 +6,15 @@ import os
 @MainActor
 @Observable
 final class CityService {
-    let cities: [City] = City.all
     private(set) var dynamicCity: City?
     private(set) var isResolvingCity: Bool = false
     private(set) var citySelectionEpoch: Int = 0
+
+    /// Most recent city that triggered a "welcome" overlay. Increments the
+    /// `welcomeEpoch` whenever set so observers can fire the animation.
+    /// Suppression and persistence logic lives in `MapScreen`.
+    private(set) var pendingWelcomeCity: City?
+    private(set) var welcomeEpoch: Int = 0
 
     private let prefs: UserPreferencesService
     private let geocoder = CLGeocoder()
@@ -21,17 +26,39 @@ final class CityService {
     }
 
     var activeCity: City {
-        dynamicCity ?? hardcodedCity
+        if let dynamicCity { return dynamicCity }
+        if let active = prefs.recentCities.first(where: { $0.id == prefs.activeCityId }) {
+            return active
+        }
+        if let first = prefs.recentCities.first {
+            return first
+        }
+        return prefs.lastDynamicCity ?? City.tallinn
     }
 
-    private var hardcodedCity: City {
-        cities.first(where: { $0.id == prefs.activeCityId }) ?? City.tallinn
+    var recentCities: [City] {
+        prefs.recentCities
     }
 
+    /// User picked a city from the switcher (recent or search result). Records it
+    /// in recents and bumps the selection epoch. The welcome animation is driven
+    /// separately by `MapViewModel` which has access to `lastSessionCityId`.
     func setActiveCity(_ city: City) {
         dynamicCity = nil
         prefs.activeCityId = city.id
+        recordRecent(city)
         citySelectionEpoch &+= 1
+    }
+
+    /// Inserts the city at the front of `recentCities`, de-duped by id, capped at
+    /// `UserPreferencesService.maxRecentCities`. Does not change the active city.
+    func recordRecent(_ city: City) {
+        var list = prefs.recentCities.filter { $0.id != city.id }
+        list.insert(city, at: 0)
+        if list.count > UserPreferencesService.maxRecentCities {
+            list = Array(list.prefix(UserPreferencesService.maxRecentCities))
+        }
+        prefs.recentCities = list
     }
 
     func updateFromCoordinate(_ coord: CLLocationCoordinate2D) {
@@ -40,6 +67,15 @@ final class CityService {
             guard let self else { return }
             await self.resolve(coord: coord)
         }
+    }
+
+    func triggerWelcome(for city: City) {
+        pendingWelcomeCity = city
+        welcomeEpoch &+= 1
+    }
+
+    func clearPendingWelcome() {
+        pendingWelcomeCity = nil
     }
 
     private func resolve(coord: CLLocationCoordinate2D) async {
@@ -58,7 +94,7 @@ final class CityService {
                 ?? "Current location"
             let country = placemark.country ?? ""
             let countryCode = placemark.isoCountryCode ?? ""
-            let id = stableDynamicId(name: name, countryCode: countryCode)
+            let id = City.stableId(name: name, countryCode: countryCode)
 
             // Keep the cached city centre stable across small GPS jitter — if the resolved
             // city id matches what we already have, don't overwrite the (possibly more
@@ -76,7 +112,8 @@ final class CityService {
                 country: country,
                 emojiFlag: "",
                 center: centerCoord,
-                defaultSpanKm: 6
+                defaultSpanKm: 6,
+                countryCode: countryCode.isEmpty ? nil : countryCode
             )
             let previousId = dynamicCity?.id
             self.dynamicCity = resolved
@@ -89,21 +126,5 @@ final class CityService {
         } catch {
             AppLog.location.error("Reverse geocode failed: \(error.localizedDescription, privacy: .public)")
         }
-    }
-
-    private func stableDynamicId(name: String, countryCode: String) -> String {
-        let slug = name
-            .lowercased()
-            .folding(options: .diacriticInsensitive, locale: .current)
-            .replacingOccurrences(of: " ", with: "_")
-            .filter { $0.isLetter || $0.isNumber || $0 == "_" }
-        let countrySlug = countryCode.lowercased()
-        if !slug.isEmpty, !countrySlug.isEmpty {
-            return "dyn_\(slug)_\(countrySlug)"
-        }
-        if !slug.isEmpty {
-            return "dyn_\(slug)"
-        }
-        return "dyn_current"
     }
 }

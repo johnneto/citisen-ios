@@ -62,6 +62,65 @@ final class GooglePlacesClient {
         return place
     }
 
+    /// Autocomplete restricted to cities/towns. The session token should remain
+    /// stable across keystrokes for a given typing session and be reused for the
+    /// follow-up `cityDetails(placeId:sessionToken:)` call to be billed as one
+    /// autocomplete session (per Google's docs).
+    func autocompleteCities(
+        query: String,
+        sessionToken: String,
+        languageCode: String? = nil
+    ) async throws -> [CityPrediction] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
+        guard let url = URL(string: AppConfig.Endpoints.placesAutocomplete) else {
+            throw SpotsError.placesUnauthorized(detail: nil)
+        }
+
+        let payload = AutocompleteRequest(
+            input: trimmed,
+            sessionToken: sessionToken,
+            includedPrimaryTypes: ["locality", "administrative_area_level_3"],
+            languageCode: languageCode
+        )
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(key, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let response: AutocompleteResponse = try await http.send(request)
+        let suggestions = response.suggestions ?? []
+        return suggestions.compactMap { CityPrediction(from: $0) }
+    }
+
+    /// Fetches the minimum payload needed to construct a `City` from a Places
+    /// autocomplete prediction: display name, coordinates, country name and ISO
+    /// country code. Passes the same `sessionToken` used for autocomplete so the
+    /// request is billed under that session.
+    func cityDetails(placeId: String, sessionToken: String) async throws -> PlaceV1? {
+        let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
+        guard var components = URLComponents(string: "\(AppConfig.Endpoints.placesDetailsBase)/\(placeId)") else {
+            throw SpotsError.placesUnauthorized(detail: nil)
+        }
+        components.queryItems = [URLQueryItem(name: "sessionToken", value: sessionToken)]
+        guard let url = components.url else {
+            throw SpotsError.placesUnauthorized(detail: nil)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(key, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue(AppConfig.Endpoints.cityDetailsFieldMask, forHTTPHeaderField: "X-Goog-FieldMask")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let place: PlaceV1 = try await http.send(request)
+        return place
+    }
+
     /// Builds a Places API (New) photo media URL for an `AsyncImage` to load.
     /// The API key is appended as `?key=` because `AsyncImage` cannot set headers.
     /// Returns nil if the key is unavailable — caller falls back to a placeholder.

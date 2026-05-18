@@ -20,7 +20,6 @@ struct SavedGroupDetailView: View {
                         ForEach(filteredSpots) { spot in
                             Button {
                                 let ids = filteredSpots.map(\.placeId)
-                                router.dismissSheet()
                                 router.openPOI(spot.placeId, in: ids)
                             } label: {
                                 SavedSpotRow(spot: spot, showLocation: showLocation)

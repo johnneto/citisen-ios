@@ -97,16 +97,16 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         case .standard:
             return """
             Curate a balanced sampler of the area, priotizing interesting places for someone visiting the city. \
-            Skip places that are famous for being a tourist trap.
+            Skip places that are famous for being a tourist trap and hotels.
             """
         case .food:
             return """
             Focus on independently owned restaurants beloved by residents. \
-            Mix price tiers, include at least one regional specialty, \
-            one casual daytime spot, one dinner spot. \
+            Mix price tiers, include at least 5 regional specialties, \
+            casual daytime spots, dinner spots. \
             Always prioritize places that offer regional food or \
             interesting dishes that are special to the city or country. \
-            Exclude hotel restaurants and global chains.
+            Exclude hotels.
             """
         case .nature:
             return """
@@ -115,18 +115,17 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
             """
         case .turbo:
             return """
-            Pick spots that are a must-see when quickly visiting the region, \
+            Pick only spots that are a must-see and essential for tourists when quickly visiting the region, \
             like iconic buildings, statues, museums, famous landmarks, parks and any place that is most relevant \
-            considering a short trip.
-            Skip hotels, global chains, generic or common suggestions, but only places that are essential \
-            to see for tourists visiting the city.
+            considering a short trip. \
+            Skip hotels unless important for visiting, generic suggestions or \
+            places that are not essential to see for visitors.
             """
         case .history:
             return """
             Pick spots linked to hitorical facts like conflicts, famous figures, \
-            neighbourhoods with preserved character, \
-            architecture highlights, museums and plaques.
-            Include at least 2 less known but curious spots using Atlas Obscure.
+            neighbourhoods with preserved character, architecture highlights, museums and plaques. \
+            Include at least 3 less known but curious spots using Atlas Obscura.
             """
         case .sports:
             return """
@@ -141,8 +140,8 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
             """
         case .cafes:
             return """
-            Independent specialty coffee, neighborhood cafés, quiet study rooms, \
-            slow breakfast spots. Skip chains and lobby cafés.
+            Independent specialty coffee, neighborhood cafes, quiet study rooms, \
+            slow breakfast spots. Skip chains and lobby cafés unless specially relevant for tourism or local culture.
             """
         case .art:
             return """

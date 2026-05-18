@@ -26,9 +26,9 @@ final class AppRouter {
     }
 
     func dismissSheet() {
-        presentedSheet = nil
-        poiPlaceIds = []
-        poiSelectedId = nil
+        if presentedSheet != nil { presentedSheet = nil }
+        if !poiPlaceIds.isEmpty { poiPlaceIds = [] }
+        if poiSelectedId != nil { poiSelectedId = nil }
     }
 
     func openHamburger() {

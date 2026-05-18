@@ -83,7 +83,8 @@ final class GeminiClient {
             "avoid common global chains unless regional",
             "prefer places locals actually use",
             "spread results across distinct neighborhoods — do not cluster near one point",
-            "avoid duplicates",
+            "do not show duplicates",
+            "exclude global chains",
             "order the response by relevance with most relevant suggestions first on the list"
         ].joined(separator: ", ")
 

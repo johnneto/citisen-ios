@@ -27,9 +27,10 @@ struct MainTabHostView: View {
                 HamburgerMenuView()
                     .zIndex(100)
             }
+            .background(AppColor.surfacePrimary.ignoresSafeArea())
             .navigationDestination(for: AppRoute.self, destination: destination(for:))
         }
-        .sheet(item: $router.presentedSheet) { sheet in
+        .sheet(item: $router.presentedSheet, onDismiss: { router.dismissSheet() }) { sheet in
             sheetContent(sheet)
         }
     }

@@ -126,7 +126,6 @@ struct SavedCollectionsView: View {
                 ForEach(allSpots) { spot in
                     Button {
                         let ids = allSpots.map(\.placeId)
-                        router.dismissSheet()
                         router.openPOI(spot.placeId, in: ids)
                     } label: {
                         SavedSpotRow(spot: spot, showLocation: true)

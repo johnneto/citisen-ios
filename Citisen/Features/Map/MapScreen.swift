@@ -39,8 +39,17 @@ struct MapScreen: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        // Opaque backdrop so the iOS 26 `glassEffect()` surfaces above
+        // (top bar, banners, tab bar) sample a stable color while the
+        // MapKit Metal layer reattaches on NavigationStack pop — otherwise
+        // they momentarily render against the black window background.
+        .background(AppColor.surfacePrimary.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.2), value: viewModel?.phase)
         .animation(.easeInOut(duration: 0.25), value: welcomeCity?.id)
+        .onDisappear {
+            poiCameraTask?.cancel()
+            poiCameraTask = nil
+        }
         .onAppear {
             if viewModel == nil {
                 let vm = MapViewModel(
@@ -75,9 +84,15 @@ struct MapScreen: View {
             // camera animation after the swipe settles — prevents first-swipe stutter.
             poiCameraTask?.cancel()
             guard let newValue, let vm = viewModel else { return }
+            // Skip when MapScreen isn't the visible top of navigation or the POI
+            // sheet isn't presenting — avoids offscreen camera work during a
+            // back-pop from Saved while `poiSelectedId` is still set.
+            guard router.path.isEmpty, router.presentedSheet == .poi else { return }
             poiCameraTask = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 120_000_000)
                 if Task.isCancelled { return }
+                guard router.presentedSheet == .poi,
+                      router.poiSelectedId == newValue else { return }
                 guard let place = vm.placesService.place(id: newValue) else { return }
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
                     vm.cameraPosition = .region(MKCoordinateRegion(
@@ -91,15 +106,17 @@ struct MapScreen: View {
 
     private func mapContent(_ vm: MapViewModel) -> some View {
         @Bindable var vm = vm
+        let filtered = vm.filteredPlaces()
+        let filteredIds = filtered.map(\.id)
         return Map(position: $vm.cameraPosition) {
             UserAnnotation()
-            ForEach(vm.filteredPlaces()) { place in
+            ForEach(filtered) { place in
                 Annotation(place.name, coordinate: place.coordinate.clLocation) {
                     Button {
                         #if canImport(UIKit)
                         UISelectionFeedbackGenerator().selectionChanged()
                         #endif
-                        router.openPOI(place.id, in: vm.filteredPlaces().map(\.id))
+                        router.openPOI(place.id, in: filteredIds)
                     } label: {
                         MapPinView(mode: place.mode, isSelected: isCurrent(place))
                     }

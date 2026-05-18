@@ -36,7 +36,7 @@ struct SavedGroupDetailView: View {
             }
         }
         .background(AppColor.surfacePrimary.ignoresSafeArea())
-        .navigationTitle(filter.title)
+        .navigationTitle(resolvedTitle)
         .navigationBarTitleDisplayMode(.large)
     }
 
@@ -47,8 +47,8 @@ struct SavedGroupDetailView: View {
                 return spot.resolvedCountryName == name
             case .city(let cityId):
                 return spot.cityId == cityId
-            case .mode(let mode):
-                return spot.mode == mode
+            case .category(let category):
+                return spot.placeCategory == category
             }
         }
     }
@@ -57,7 +57,20 @@ struct SavedGroupDetailView: View {
         switch filter {
         case .country: return true
         case .city:    return false
-        case .mode:    return true
+        case .category: return true
+        }
+    }
+
+    private var resolvedTitle: String {
+        switch filter {
+        case .country(let name, _):
+            return name
+        case .city:
+            // Prefer the saved entity's stored city name — handles cities outside
+            // the built-in `City.all` list (e.g. dynamically resolved from GPS).
+            return filteredSpots.first?.resolvedCityName ?? filter.title
+        case .category(let category):
+            return category
         }
     }
 
@@ -83,7 +96,7 @@ struct SavedGroupDetailView: View {
     private var emptyIcon: String {
         switch filter {
         case .country, .city: return "mappin.and.ellipse"
-        case .mode(let mode): return mode.iconSymbol
+        case .category: return "square.grid.2x2"
         }
     }
 }

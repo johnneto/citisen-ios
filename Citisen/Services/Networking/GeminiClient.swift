@@ -87,6 +87,18 @@ final class GeminiClient {
             "order the response by relevance with most relevant suggestions first on the list"
         ].joined(separator: ", ")
 
+        let primaryTypeGuidance = """
+        For each spot, also set "primaryType" to the single Google Places (New) primary type \
+        string that best matches the venue. Use the exact snake_case identifier (no display \
+        formatting). Examples of valid values: restaurant, cafe, bar, bakery, night_club, \
+        church, mosque, synagogue, hindu_temple, place_of_worship, museum, art_gallery, \
+        library, historical_landmark, tourist_attraction, monument, park, garden, beach, zoo, \
+        aquarium, book_store, shopping_mall, clothing_store, market, hotel, lodging, gym, spa, \
+        yoga_studio, theater, movie_theater, stadium, concert_hall, amusement_park, viewpoint. \
+        If unsure, omit primaryType rather than guess — a wrong value will filter out the \
+        correct place.
+        """
+
         let scope = """
         Suggest between \(minCount) and \(maxCount) \(mode.displayName) highlights across the \
         entire city of \(city.name) — cover the whole city perimeter (historic core, residential \
@@ -106,6 +118,7 @@ final class GeminiClient {
         \(framing)
         \(mode.promptInstructions)
         HARD CONSTRAINTS: \(constraints).
+        \(primaryTypeGuidance)
         """
     }
 

@@ -102,6 +102,41 @@ final class CitisenTests: XCTestCase {
 
     // MARK: - AppConfig field mask
 
+    // MARK: - TabBarLayout
+
+    func test_TabBarLayout_index_returnsNilWhenNotLaidOut() {
+        XCTAssertNil(TabBarLayout.index(forLocationX: 10, barWidth: 0, inset: 4, tabCount: 5))
+        XCTAssertNil(TabBarLayout.index(forLocationX: 10, barWidth: 320, inset: 4, tabCount: 0))
+    }
+
+    func test_TabBarLayout_index_splitsBarIntoEqualSlots() {
+        let width: CGFloat = 320
+        let inset: CGFloat = 4
+        // Inner width = 312 → each of 5 slots is 62.4pt
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 4, barWidth: width, inset: inset, tabCount: 5), 0)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 35, barWidth: width, inset: inset, tabCount: 5), 0)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 70, barWidth: width, inset: inset, tabCount: 5), 1)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 160, barWidth: width, inset: inset, tabCount: 5), 2)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 250, barWidth: width, inset: inset, tabCount: 5), 3)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 315, barWidth: width, inset: inset, tabCount: 5), 4)
+    }
+
+    func test_TabBarLayout_index_clampsOutOfBoundsTouches() {
+        let width: CGFloat = 320
+        XCTAssertEqual(TabBarLayout.index(forLocationX: -50, barWidth: width, inset: 4, tabCount: 5), 0)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 9999, barWidth: width, inset: 4, tabCount: 5), 4)
+    }
+
+    func test_TabBarLayout_slotIndex_skipsCenterpiece() {
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 0), 0)
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 1), 1)
+        XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: 2)) // centerpiece
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 3), 2)
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 4), 3)
+        XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: -1))
+        XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: 5))
+    }
+
     func test_AppConfig_searchTextFieldMask_containsAllFieldsRead() {
         let mask = AppConfig.Endpoints.searchTextFieldMask
         let required = [

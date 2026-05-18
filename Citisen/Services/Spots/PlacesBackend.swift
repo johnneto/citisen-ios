@@ -1,5 +1,11 @@
 import Foundation
 
+enum PlaceResolution {
+    case found(Place)
+    case notFound
+    case transientFailure
+}
+
 protocol PlacesBackend: AnyObject {
     func loadSpots(
         city: City,
@@ -22,6 +28,17 @@ protocol PlacesBackend: AnyObject {
     func search(query: String, city: City) async -> [Place]
 
     func resolvePlace(id: UUID) async -> Place?
+
+    /// Resolves a Place using the in-app caches first, then falling back to
+    /// Google Places by `googlePlaceId` when provided. `cityId` and `mode` are
+    /// used to map the refetched details into the app's `Place` representation
+    /// (they come from the persisted saved entity).
+    func resolvePlaceResult(
+        id: UUID,
+        googlePlaceId: String?,
+        cityId: String?,
+        mode: TravelMode?
+    ) async -> PlaceResolution
 
     func clearCache(forCityId cityId: String)
 

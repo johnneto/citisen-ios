@@ -6,6 +6,8 @@ struct SearchTextRequest: Encodable {
     let textQuery: String
     let locationBias: LocationBias
     let maxResultCount: Int
+    let includedType: String?
+    let strictTypeFiltering: Bool?
 
     struct LocationBias: Encodable {
         let circle: Circle
@@ -14,6 +16,19 @@ struct SearchTextRequest: Encodable {
             let center: LatLngV1
             let radius: Double
         }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case textQuery, locationBias, maxResultCount, includedType, strictTypeFiltering
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(textQuery, forKey: .textQuery)
+        try container.encode(locationBias, forKey: .locationBias)
+        try container.encode(maxResultCount, forKey: .maxResultCount)
+        try container.encodeIfPresent(includedType, forKey: .includedType)
+        try container.encodeIfPresent(strictTypeFiltering, forKey: .strictTypeFiltering)
     }
 }
 
@@ -31,6 +46,7 @@ struct PlaceV1: Decodable {
     let rating: Double?
     let userRatingCount: Int?
     let priceLevel: String?
+    let primaryType: String?
     let types: [String]?
     let regularOpeningHours: OpeningHoursV1?
     let currentOpeningHours: OpeningHoursV1?

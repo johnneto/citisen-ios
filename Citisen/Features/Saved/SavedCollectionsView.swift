@@ -4,6 +4,8 @@ import SwiftUI
 struct SavedCollectionsView: View {
     @Environment(AppRouter.self)
     private var router
+    @Environment(\.dismiss)
+    private var dismiss
 
     @Query(sort: \SavedSpotEntity.savedAt, order: .reverse)
     private var allSpots: [SavedSpotEntity]
@@ -19,9 +21,7 @@ struct SavedCollectionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            groupingPicker
-                .padding(.horizontal, Spacing.lg)
-                .padding(.top, Spacing.sm)
+            pinnedHeader
 
             if allSpots.isEmpty {
                 emptySpotsState
@@ -35,8 +35,41 @@ struct SavedCollectionsView: View {
             }
         }
         .background(AppColor.surfacePrimary.ignoresSafeArea())
-        .navigationTitle("Saved")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var pinnedHeader: some View {
+        VStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.sm) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppColor.textPrimary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+
+                Image(systemName: "bookmark.fill")
+                    .font(.title2)
+                    .foregroundStyle(AppColor.textPrimary)
+                Text("Saved")
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundStyle(AppColor.textPrimary)
+                Spacer()
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.md)
+
+            groupingPicker
+                .padding(.horizontal, Spacing.lg)
+                .padding(.bottom, Spacing.sm)
+        }
+        .background(AppColor.surfacePrimary)
     }
 
     // MARK: - Grouping picker
@@ -144,16 +177,20 @@ struct SavedCollectionsView: View {
         }
     }
 
-    // MARK: - Mode (Type) group list
+    // MARK: - Category (Type) group list
 
     private var typeGroupList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(modeGroups) { group in
+                ForEach(categoryGroups) { group in
                     Button {
-                        router.push(.savedGroupDetail(.mode(group.mode)))
+                        router.push(.savedGroupDetail(.category(group.category)))
                     } label: {
-                        SavedGroupRow(leading: .modeIcon(group.mode), title: group.mode.displayName, count: group.count)
+                        SavedGroupRow(
+                            leading: .categoryIcon(symbol: Self.iconSymbol(forCategory: group.category)),
+                            title: group.category,
+                            count: group.count
+                        )
                     }
                     .buttonStyle(.plain)
                     Divider().background(AppColor.dividerSoft).padding(.leading, 68)
@@ -161,6 +198,21 @@ struct SavedCollectionsView: View {
             }
             .padding(.top, Spacing.sm)
         }
+    }
+
+    static func iconSymbol(forCategory category: String) -> String {
+        let lower = category.lowercased()
+        if lower.contains("restaurant") || lower.contains("food") { return "fork.knife" }
+        if lower.contains("cafe") || lower.contains("coffee") || lower.contains("bakery") { return "cup.and.saucer.fill" }
+        if lower.contains("bar") || lower.contains("pub") || lower.contains("night") { return "wineglass.fill" }
+        if lower.contains("hotel") || lower.contains("lodging") { return "bed.double.fill" }
+        if lower.contains("museum") || lower.contains("gallery") { return "building.columns.fill" }
+        if lower.contains("park") || lower.contains("garden") { return "leaf.fill" }
+        if lower.contains("landmark") || lower.contains("attraction") || lower.contains("monument") { return "star.fill" }
+        if lower.contains("store") || lower.contains("shop") || lower.contains("market") { return "bag.fill" }
+        if lower.contains("church") || lower.contains("cathedral") || lower.contains("place of worship") { return "building.2.fill" }
+        if lower.contains("beach") { return "beach.umbrella.fill" }
+        return "mappin.circle.fill"
     }
 
     // MARK: - Grouping computation
@@ -182,11 +234,11 @@ struct SavedCollectionsView: View {
         var id: String { cityId }
     }
 
-    private struct ModeGroup: Identifiable {
-        let mode: TravelMode
+    private struct CategoryGroup: Identifiable {
+        let category: String
         let count: Int
         let lastSavedAt: Date
-        var id: String { mode.rawValue }
+        var id: String { category }
     }
 
     private var countryGroups: [CountryGroup] {
@@ -242,23 +294,23 @@ struct SavedCollectionsView: View {
         .sorted { $0.lastSavedAt > $1.lastSavedAt }
     }
 
-    private var modeGroups: [ModeGroup] {
-        var counts: [TravelMode: Int] = [:]
-        var latestDates: [TravelMode: Date] = [:]
+    private var categoryGroups: [CategoryGroup] {
+        var counts: [String: Int] = [:]
+        var latestDates: [String: Date] = [:]
         for spot in allSpots {
-            let mode = spot.mode
-            counts[mode, default: 0] += 1
-            if let existing = latestDates[mode] {
-                if spot.savedAt > existing { latestDates[mode] = spot.savedAt }
+            let category = spot.placeCategory.isEmpty ? "Other" : spot.placeCategory
+            counts[category, default: 0] += 1
+            if let existing = latestDates[category] {
+                if spot.savedAt > existing { latestDates[category] = spot.savedAt }
             } else {
-                latestDates[mode] = spot.savedAt
+                latestDates[category] = spot.savedAt
             }
         }
-        return counts.keys.map { mode in
-            ModeGroup(
-                mode: mode,
-                count: counts[mode] ?? 0,
-                lastSavedAt: latestDates[mode] ?? .distantPast
+        return counts.keys.map { category in
+            CategoryGroup(
+                category: category,
+                count: counts[category] ?? 0,
+                lastSavedAt: latestDates[category] ?? .distantPast
             )
         }
         .sorted { $0.lastSavedAt > $1.lastSavedAt }
@@ -271,6 +323,7 @@ struct SavedGroupRow: View {
     enum Leading {
         case flag(String)
         case modeIcon(TravelMode)
+        case categoryIcon(symbol: String)
     }
 
     let leading: Leading
@@ -314,6 +367,14 @@ struct SavedGroupRow: View {
                     .fill(mode.tintColor)
                 Image(systemName: mode.iconSymbol)
                     .foregroundStyle(mode.color)
+                    .font(.system(size: 20, weight: .semibold))
+            }
+        case .categoryIcon(let symbol):
+            ZStack {
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .fill(AppColor.surfaceGrouped)
+                Image(systemName: symbol)
+                    .foregroundStyle(AppColor.textPrimary)
                     .font(.system(size: 20, weight: .semibold))
             }
         }

@@ -6,148 +6,239 @@ struct LiquidGlassTabBar: View {
     @Environment(AppRouter.self)
     private var router
 
-    @Namespace private var selectionRingNS
+    @Namespace private var bubbleNS
     @State private var tabBarWidth: CGFloat = 0
+    @State private var pressedIndex: Int?
+    @State private var lastHapticIndex: Int?
 
+    static let barHeight: CGFloat = 76
+    static let horizontalInset: CGFloat = 4
     private static let coordinateSpaceName = "LiquidGlassTabBar"
-    private static let horizontalInset: CGFloat = 4
+
+    static let selectionSpring: Animation = .spring(
+        response: 0.42,
+        dampingFraction: 0.74,
+        blendDuration: 0.18
+    )
+    private static let pressSpring: Animation = .spring(
+        response: 0.28,
+        dampingFraction: 0.7
+    )
+
+    private var displayedIndex: Int { pressedIndex ?? prefs.activeModeIndex }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(prefs.tabBarOrder.enumerated()), id: \.offset) { index, mode in
-                tab(for: mode, index: index)
-            }
+        ZStack {
+            bubbleLayer
+            contentLayer
         }
         .padding(.horizontal, Self.horizontalInset)
-        .frame(height: 76)
+        .frame(height: Self.barHeight)
         .background(
             GeometryReader { proxy in
                 Color.clear
                     .onAppear { tabBarWidth = proxy.size.width }
-                    .onChange(of: proxy.size.width) { _, newWidth in
-                        tabBarWidth = newWidth
-                    }
+                    .onChange(of: proxy.size.width) { _, new in tabBarWidth = new }
             }
         )
         .coordinateSpace(name: Self.coordinateSpaceName)
-        .simultaneousGesture(slideGesture)
+        .contentShape(Rectangle())
+        .gesture(pressGesture)
+        .animation(Self.selectionSpring, value: displayedIndex)
+        .animation(Self.pressSpring, value: pressedIndex)
         .liquidGlassPill(strength: .regular, interactive: true)
     }
 
-    private var slideGesture: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .named(Self.coordinateSpaceName))
-            .onChanged { value in
-                updateIndex(forDragLocationX: value.location.x)
-            }
-    }
+    // MARK: - Layers
 
-    private func updateIndex(forDragLocationX x: CGFloat) {
-        let count = prefs.tabBarOrder.count
-        guard count > 0, tabBarWidth > 0 else { return }
-        let innerWidth = max(tabBarWidth - Self.horizontalInset * 2, 1)
-        let innerX = min(max(x - Self.horizontalInset, 0), innerWidth)
-        let raw = Int((innerX / innerWidth) * CGFloat(count))
-        let index = min(max(raw, 0), count - 1)
-        guard prefs.activeModeIndex != index else { return }
-        #if canImport(UIKit)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
-        @Bindable var prefs = prefs
-        prefs.activeModeIndex = index
-    }
-
-    private func tab(for mode: TravelMode, index: Int) -> some View {
-        let isActive = prefs.activeModeIndex == index
-        let isStandard = mode == .standard
-
-        return Button {
-            tap(index: index)
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: mode.iconSymbol)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(isActive ? AppColor.textPrimary : AppColor.textSecondary)
-                Text(mode.displayName.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundStyle(isActive ? AppColor.textPrimary : AppColor.textSecondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .background {
-                if isActive {
-                    activeHighlight(for: mode)
+    @ViewBuilder private var bubbleLayer: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 0) {
+                    bubbleRow
                 }
+            } else {
+                bubbleRow
             }
         }
-        .buttonStyle(.plain)
+        .allowsHitTesting(false)
+    }
+
+    private var bubbleRow: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(prefs.tabBarOrder.enumerated()), id: \.offset) { index, mode in
+                ZStack {
+                    if displayedIndex == index {
+                        SelectionBubble(
+                            mode: mode,
+                            isPressing: pressedIndex == index,
+                            bubbleNS: bubbleNS
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private var contentLayer: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(prefs.tabBarOrder.enumerated()), id: \.offset) { index, mode in
+                tabContent(for: mode, index: index)
+            }
+        }
+    }
+
+    private func tabContent(for mode: TravelMode, index: Int) -> some View {
+        let isDisplayed = displayedIndex == index
+        let isPressed = pressedIndex == index
+        let scale: CGFloat = isPressed ? 0.94 : (isDisplayed ? 1.04 : 1.0)
+
+        return VStack(spacing: 2) {
+            Image(systemName: mode.iconSymbol)
+                .font(.system(size: 22, weight: .bold))
+            Text(mode.displayName.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.8)
+        }
+        .foregroundStyle(isDisplayed ? Color.white : AppColor.textSecondary)
+        .shadow(color: isDisplayed ? .black.opacity(0.45) : .clear, radius: 1.5, x: 0, y: 0.5)
+        .scaleEffect(scale)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .hoverEffect(.lift)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(mode.displayName) mode")
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+        .accessibilityAddTraits(prefs.activeModeIndex == index ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityAction { commit(index: index) }
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.45)
                 .onEnded { _ in
-                    guard !isStandard else { return }
+                    guard mode != .standard else { return }
                     longPress(mode: mode)
                 }
         )
-        .animation(
-            .interactiveSpring(response: 0.3, dampingFraction: 0.75, blendDuration: 0.2),
-            value: prefs.activeModeIndex
-        )
     }
 
-    @ViewBuilder
-    private func activeHighlight(for mode: TravelMode) -> some View {
-        if #available(iOS 26.0, *) {
-            Color.clear
-                .glassEffect(
-                    Glass.regular.tint(mode.color.opacity(0.28)).interactive(),
-                    in: RoundedRectangle(cornerRadius: 26, style: .continuous)
-                )
-                .padding(.vertical, 4)
-                .padding(.horizontal, 0)
-                .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
-        } else {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color.dynamic(
-                    light: mode.color.opacity(0.22),
-                    dark: mode.color.opacity(0.38)
-                ))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(mode.color.opacity(0.55), lineWidth: 1)
-                )
-                .shadow(color: mode.color.opacity(0.30), radius: 8, x: 0, y: 3)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 0)
-                .matchedGeometryEffect(id: "activeRing", in: selectionRingNS)
-        }
+    // MARK: - Gesture (hold + slide preview, commit on release)
+
+    private var pressGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.coordinateSpaceName))
+            .onChanged { value in
+                guard let idx = TabBarLayout.index(
+                    forLocationX: value.location.x,
+                    barWidth: tabBarWidth,
+                    inset: Self.horizontalInset,
+                    tabCount: prefs.tabBarOrder.count
+                ) else { return }
+                if pressedIndex != idx {
+                    pressedIndex = idx
+                    if lastHapticIndex != idx {
+                        lastHapticIndex = idx
+                        #if canImport(UIKit)
+                        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                        #endif
+                    }
+                }
+            }
+            .onEnded { value in
+                defer {
+                    pressedIndex = nil
+                    lastHapticIndex = nil
+                }
+                guard let idx = TabBarLayout.index(
+                    forLocationX: value.location.x,
+                    barWidth: tabBarWidth,
+                    inset: Self.horizontalInset,
+                    tabCount: prefs.tabBarOrder.count
+                ) else { return }
+                commit(index: idx)
+            }
     }
 
-    private func tap(index: Int) {
+    // MARK: - Actions
+
+    private func commit(index: Int) {
         @Bindable var prefs = prefs
         guard prefs.activeModeIndex != index else { return }
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
-        prefs.activeModeIndex = index
+        withAnimation(Self.selectionSpring) {
+            prefs.activeModeIndex = index
+        }
     }
 
     private func longPress(mode: TravelMode) {
-        // Map active tab-bar index back to the slot (0..3) in prefs.activeModes.
-        let order = prefs.tabBarOrder
-        guard let orderIndex = order.firstIndex(of: mode) else { return }
-        let slotIndex: Int = {
-            switch orderIndex {
-            case 0, 1: return orderIndex
-            case 3, 4: return orderIndex - 1
-            default: return -1
-            }
-        }()
-        guard slotIndex >= 0 else { return }
+        guard let slotIndex = TabBarLayout.slotIndex(forOrderIndex: prefs.tabBarOrder.firstIndex(of: mode) ?? -1) else { return }
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
         router.present(.modePicker(slotIndex: slotIndex))
+    }
+}
+
+// MARK: - Pure layout helpers (testable)
+
+enum TabBarLayout {
+    /// Maps a horizontal touch location (in the bar's coordinate space, including the
+    /// outer inset) to a tab index in `0..<tabCount`. Returns nil if the bar has not
+    /// yet been laid out or there are no tabs.
+    static func index(forLocationX x: CGFloat, barWidth: CGFloat, inset: CGFloat, tabCount: Int) -> Int? {
+        guard tabCount > 0, barWidth > 0 else { return nil }
+        let innerWidth = max(barWidth - inset * 2, 1)
+        let innerX = min(max(x - inset, 0), innerWidth)
+        let raw = Int((innerX / innerWidth) * CGFloat(tabCount))
+        return min(max(raw, 0), tabCount - 1)
+    }
+
+    /// Maps a tab-bar order index (5 visual slots, middle one is the centerpiece) to a
+    /// stored mode-picker slot index (0...3). Returns nil for the centerpiece slot.
+    static func slotIndex(forOrderIndex orderIndex: Int) -> Int? {
+        switch orderIndex {
+        case 0, 1: return orderIndex
+        case 3: return 2
+        case 4: return 3
+        default: return nil
+        }
+    }
+}
+
+// MARK: - Selection bubble
+
+private struct SelectionBubble: View {
+    let mode: TravelMode
+    let isPressing: Bool
+    let bubbleNS: Namespace.ID
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        let glow = mode.color.opacity(isPressing ? 0.55 : 0.32)
+        let glowRadius: CGFloat = isPressing ? 16 : 9
+        let glowY: CGFloat = isPressing ? 6 : 3
+        let squish: CGFloat = isPressing ? 0.94 : 1.0
+
+        Group {
+            if #available(iOS 26.0, *) {
+                Color.clear
+                    .glassEffect(
+                        Glass.regular.tint(mode.color.opacity(0.38)).interactive(),
+                        in: shape
+                    )
+                    .overlay(shape.strokeBorder(mode.color.opacity(0.65), lineWidth: 1))
+                    .glassEffectID("selectionBubble", in: bubbleNS)
+            } else {
+                shape
+                    .fill(Color.dynamic(
+                        light: mode.color.opacity(0.45),
+                        dark: mode.color.opacity(0.55)
+                    ))
+                    .overlay(shape.strokeBorder(mode.color.opacity(0.7), lineWidth: 1))
+            }
+        }
+        .shadow(color: glow, radius: glowRadius, x: 0, y: glowY)
+        .padding(.vertical, 4)
+        .scaleEffect(squish)
+        .matchedGeometryEffect(id: "selectionBubble", in: bubbleNS)
     }
 }

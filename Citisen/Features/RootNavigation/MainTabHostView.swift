@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 struct MainTabHostView: View {
@@ -106,20 +107,11 @@ struct MainTabHostView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 0) {
                     ForEach(Array(ids.enumerated()), id: \.element) { index, id in
-                        Group {
-                            if let place = places.place(id: id) {
-                                POISheetView(
-                                    place: place,
-                                    pageIndex: ids.count > 1 ? index : nil,
-                                    pageCount: ids.count > 1 ? ids.count : nil
-                                )
-                            } else {
-                                VStack {
-                                    Text("Place not found").font(.headline17)
-                                }
-                                .padding()
-                            }
-                        }
+                        POIPage(
+                            placeId: id,
+                            pageIndex: ids.count > 1 ? index : nil,
+                            pageCount: ids.count > 1 ? ids.count : nil
+                        )
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .id(id)
                     }
@@ -156,5 +148,115 @@ struct MainTabHostView: View {
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+/// Renders a single POI page inside the paging sheet. Resolves the place
+/// asynchronously when it is not in the in-memory snapshot — e.g. after the
+/// Gemini list cache expired but the saved entity still points at it — by
+/// refetching through Google Places using the persisted `googlePlaceId`.
+private struct POIPage: View {
+    @Environment(PlacesService.self)
+    private var places
+    @Environment(AppRouter.self)
+    private var router
+    @Environment(\.modelContext)
+    private var modelContext
+
+    @Query private var savedQuery: [SavedSpotEntity]
+
+    @State private var resolved: Place?
+    @State private var notFound = false
+    @State private var transientFailure = false
+
+    let placeId: UUID
+    let pageIndex: Int?
+    let pageCount: Int?
+
+    init(placeId: UUID, pageIndex: Int?, pageCount: Int?) {
+        self.placeId = placeId
+        self.pageIndex = pageIndex
+        self.pageCount = pageCount
+        _savedQuery = Query(filter: #Predicate<SavedSpotEntity> { $0.placeId == placeId })
+    }
+
+    private var savedEntity: SavedSpotEntity? { savedQuery.first }
+
+    var body: some View {
+        Group {
+            if let place = resolved {
+                POISheetView(
+                    place: place,
+                    pageIndex: pageIndex,
+                    pageCount: pageCount
+                )
+            } else if notFound {
+                notFoundView
+            } else if transientFailure {
+                transientFailureView
+            } else {
+                loadingView
+            }
+        }
+        .task(id: placeId) {
+            await load()
+        }
+    }
+
+    private var notFoundView: some View {
+        VStack(spacing: Spacing.sm) {
+            Text("Place not found")
+                .font(.headline17)
+                .foregroundStyle(AppColor.textPrimary)
+            if savedEntity != nil {
+                Button {
+                    SavedSpotsService(context: modelContext).unsave(placeId: placeId)
+                    router.dismissSheet()
+                } label: {
+                    Text("Remove")
+                        .font(.subheadline15.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    private var transientFailureView: some View {
+        VStack {
+            Text("Place not found").font(.headline17)
+        }
+        .padding()
+    }
+
+    private var loadingView: some View {
+        VStack {
+            ProgressView()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func load() async {
+        if let snapshot = places.place(id: placeId) {
+            resolved = snapshot
+            return
+        }
+        let entity = savedEntity
+        let result = await places.resolvePlaceResult(
+            id: placeId,
+            googlePlaceId: entity?.googlePlaceId,
+            cityId: entity?.cityId,
+            mode: entity?.mode
+        )
+        switch result {
+        case .found(let place):
+            resolved = place
+        case .notFound:
+            notFound = true
+        case .transientFailure:
+            transientFailure = true
+        }
     }
 }

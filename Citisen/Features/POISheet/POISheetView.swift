@@ -16,12 +16,31 @@ struct POISheetView: View {
     private var dismiss
     @Environment(CityService.self)
     private var cityService
+    @Environment(UserPreferencesService.self)
+    private var prefs
     @Environment(AppRouter.self)
     private var router
+
+    @Query private var savedQueryResults: [SavedSpotEntity]
 
     @State private var viewModel: POISheetViewModel?
     @State private var showMoreReviewsAlert = false
     @State private var showVoiceAlert = false
+
+    init(place: Place, pageIndex: Int? = nil, pageCount: Int? = nil) {
+        self.place = place
+        self.pageIndex = pageIndex
+        self.pageCount = pageCount
+        let pid = place.id
+        _savedQueryResults = Query(filter: #Predicate<SavedSpotEntity> { $0.placeId == pid })
+    }
+
+    /// Reactively reflects the SwiftData state so the saved indicator stays in
+    /// sync across travel-mode switches and external mutations (e.g. removing
+    /// the entity from the saved tab while the sheet is open).
+    private var currentRating: SavedSpotRating? {
+        savedQueryResults.first?.rating
+    }
 
     var body: some View {
         Group {
@@ -32,18 +51,41 @@ struct POISheetView: View {
             }
         }
         .task(id: place.id) {
-            // Build the VM eagerly so prefetched neighbour pages in TabView(.page)
-            // have content during the swipe — but keep init cheap (no SwiftData fetch).
             if viewModel == nil {
-                viewModel = POISheetViewModel(place: place, context: modelContext)
+                viewModel = POISheetViewModel(
+                    place: place,
+                    context: modelContext,
+                    cityInfoProvider: { [cityService, prefs, place] in
+                        Self.resolveCityInfo(
+                            for: place.cityId,
+                            cityService: cityService,
+                            prefs: prefs
+                        )
+                    }
+                )
             }
-            // Defer the SwiftData rating fetch until the gesture has settled. `.task`
-            // is auto-cancelled when the view disappears, so mid-swipe cancellation
-            // is handled by SwiftUI.
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            if Task.isCancelled { return }
-            viewModel?.loadRating()
         }
+    }
+
+    private static func resolveCityInfo(
+        for cityId: String,
+        cityService: CityService,
+        prefs: UserPreferencesService
+    ) -> CityInfo? {
+        if cityService.activeCity.id == cityId {
+            let city = cityService.activeCity
+            return CityInfo(name: city.name, country: city.country, flag: city.flagEmoji)
+        }
+        if let recent = prefs.recentCities.first(where: { $0.id == cityId }) {
+            return CityInfo(name: recent.name, country: recent.country, flag: recent.flagEmoji)
+        }
+        if let dynamic = cityService.dynamicCity, dynamic.id == cityId {
+            return CityInfo(name: dynamic.name, country: dynamic.country, flag: dynamic.flagEmoji)
+        }
+        if let preset = City.all.first(where: { $0.id == cityId }) {
+            return CityInfo(name: preset.name, country: preset.country, flag: preset.flagEmoji)
+        }
+        return nil
     }
 
     private func content(_ vm: POISheetViewModel) -> some View {
@@ -79,8 +121,8 @@ struct POISheetView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             if vm.isSaveMenuOpen {
-                SaveRatingMenu(current: vm.currentRating) { rating in
-                    vm.pick(rating)
+                SaveRatingMenu(current: currentRating) { rating in
+                    vm.pick(rating, currentRating: currentRating)
                 }
                 .padding(.trailing, Spacing.md)
                 .padding(.bottom, 92)
@@ -355,7 +397,7 @@ struct POISheetView: View {
     // MARK: - Action bar
 
     private func actionBar(vm: POISheetViewModel) -> some View {
-        let rating = vm.currentRating
+        let rating = currentRating
         let background: Color = rating?.color ?? place.mode.color
 
         return HStack(spacing: 10) {

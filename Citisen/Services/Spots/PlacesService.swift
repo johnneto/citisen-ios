@@ -74,6 +74,25 @@ final class PlacesService {
         return nil
     }
 
+    func resolvePlaceResult(
+        id: UUID,
+        googlePlaceId: String?,
+        cityId: String?,
+        mode: TravelMode?
+    ) async -> PlaceResolution {
+        if let cached = snapshot[id] { return .found(cached) }
+        let result = await backend.resolvePlaceResult(
+            id: id,
+            googlePlaceId: googlePlaceId,
+            cityId: cityId,
+            mode: mode
+        )
+        if case .found(let place) = result {
+            snapshot[id] = place
+        }
+        return result
+    }
+
     func clearCache(forCityId cityId: String) {
         backend.clearCache(forCityId: cityId)
         snapshot = snapshot.filter { $0.value.cityId != cityId }

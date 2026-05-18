@@ -14,7 +14,8 @@ final class GooglePlacesClient {
     func searchText(
         query: String,
         near center: CLLocationCoordinate2D,
-        radius: Double = 5_000
+        radius: Double = 5_000,
+        includedType: String? = nil
     ) async throws -> PlaceV1? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
@@ -30,7 +31,9 @@ final class GooglePlacesClient {
                     radius: radius
                 )
             ),
-            maxResultCount: 1
+            maxResultCount: 1,
+            includedType: includedType,
+            strictTypeFiltering: includedType == nil ? nil : true
         )
 
         var request = URLRequest(url: url)

@@ -60,6 +60,18 @@ final class MockPlacesBackend: PlacesBackend {
         MockSeed.allPlaces.first { $0.id == id }
     }
 
+    func resolvePlaceResult(
+        id: UUID,
+        googlePlaceId: String?,
+        cityId: String?,
+        mode: TravelMode?
+    ) async -> PlaceResolution {
+        if let place = MockSeed.allPlaces.first(where: { $0.id == id }) {
+            return .found(place)
+        }
+        return .notFound
+    }
+
     func clearCache(forCityId cityId: String) {}
 
     func cachedSpots(city: City, mode: TravelMode) -> [Place]? { nil }

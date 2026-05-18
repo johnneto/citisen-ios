@@ -105,6 +105,48 @@ final class RemotePlacesBackend: PlacesBackend {
         return await mockFallback.resolvePlace(id: id)
     }
 
+    func resolvePlaceResult(
+        id: UUID,
+        googlePlaceId: String?,
+        cityId: String?,
+        mode: TravelMode?
+    ) async -> PlaceResolution {
+        if let cached = cache.loadPlace(id: id) { return .found(cached) }
+
+        if let gpid = googlePlaceId, let cityId, let mode {
+            do {
+                guard let details = try await places.placeDetails(id: gpid) else {
+                    return .notFound
+                }
+                guard let place = PlaceMapper.makePlace(
+                    from: details,
+                    cityId: cityId,
+                    mode: mode
+                ) else {
+                    return .notFound
+                }
+                cache.savePlace(place)
+                return .found(place)
+            } catch let spotsError as SpotsError {
+                switch spotsError {
+                case .placesNotFound:
+                    return .notFound
+                default:
+                    AppLog.places.error("resolvePlaceResult failed for \(gpid, privacy: .public): \(spotsError.localizedDescription, privacy: .public)")
+                    return .transientFailure
+                }
+            } catch {
+                AppLog.places.error("resolvePlaceResult failed: \(error.localizedDescription, privacy: .public)")
+                return .transientFailure
+            }
+        }
+
+        if let mock = await mockFallback.resolvePlace(id: id) {
+            return .found(mock)
+        }
+        return .notFound
+    }
+
     func clearCache(forCityId cityId: String) {
         cache.clearLists(forCityId: cityId)
     }
@@ -241,8 +283,21 @@ final class RemotePlacesBackend: PlacesBackend {
         viewport: Viewport
     ) async throws -> Place? {
         let query = "\(curated.name), \(city.name)"
+        let typeHint = curated.primaryType?.trimmingCharacters(in: .whitespaces)
+        let normalizedHint = (typeHint?.isEmpty == false) ? typeHint : nil
         do {
-            guard let details = try await places.searchText(query: query, near: viewport.center) else {
+            var details = try await places.searchText(
+                query: query,
+                near: viewport.center,
+                includedType: normalizedHint
+            )
+            // If the type-filtered search returned nothing, the Gemini hint was
+            // likely wrong — retry without it so we still pick up the place.
+            if details == nil, normalizedHint != nil {
+                AppLog.places.debug("No type-filtered match for \(curated.name, privacy: .public) (hint=\(normalizedHint ?? "-", privacy: .public)); retrying without includedType")
+                details = try await places.searchText(query: query, near: viewport.center)
+            }
+            guard let details else {
                 AppLog.places.debug("No match for \(curated.name, privacy: .public)")
                 return nil
             }

@@ -18,21 +18,72 @@ enum PlaceMapper {
         if let neighborhood = curated.neighborhood, !neighborhood.isEmpty {
             tags.append(neighborhood)
         }
-        if let primaryType = details.types?.first {
-            tags.append(formatType(primaryType))
+        let canonicalType = details.primaryType ?? details.types?.first
+        if let canonicalType {
+            tags.append(formatType(canonicalType))
         }
 
         let description = curated.rationale
             ?? details.editorialSummary?.text
             ?? "\(mode.displayName) spot in \(city.name)."
 
-        let category = details.types?.first.map(formatType) ?? mode.displayName
+        let category = canonicalType.map(formatType) ?? mode.displayName
 
         return Place(
             id: id,
             googlePlaceId: details.id,
             cityId: city.id,
             name: details.displayName?.text ?? curated.name,
+            category: category,
+            mode: mode,
+            coordinate: Coordinate(latitude: location.latitude, longitude: location.longitude),
+            rating: details.rating ?? 0,
+            reviewCount: details.userRatingCount ?? 0,
+            priceLevel: priceLevelInt(details.priceLevel),
+            description: description,
+            tags: tags,
+            openingHours: openingHours(from: weekday),
+            isOpenNow: openNow,
+            closesAt: closesAt(from: weekday),
+            reviews: details.reviews?.compactMap(makeReview) ?? [],
+            address: details.formattedAddress ?? "",
+            website: details.websiteUri.flatMap { URL(string: $0) },
+            phone: details.internationalPhoneNumber ?? details.nationalPhoneNumber,
+            photoNames: photoNames(from: details.photos)
+        )
+    }
+
+    /// Builds a `Place` from a refetched `PlaceV1` when no curated metadata is
+    /// available (e.g. opening a saved spot after its Gemini cache expired).
+    /// Uses the persisted `cityId` and `mode` from the saved entity.
+    static func makePlace(
+        from details: PlaceV1,
+        cityId: String,
+        mode: TravelMode
+    ) -> Place? {
+        guard let location = details.location else { return nil }
+        let id = Place.id(forGooglePlaceId: details.id)
+        let openNow = details.currentOpeningHours?.openNow ?? details.regularOpeningHours?.openNow ?? false
+        let weekday = details.currentOpeningHours?.weekdayDescriptions
+            ?? details.regularOpeningHours?.weekdayDescriptions
+            ?? []
+
+        var tags: [String] = []
+        let canonicalType = details.primaryType ?? details.types?.first
+        if let canonicalType {
+            tags.append(formatType(canonicalType))
+        }
+
+        let cityName = City.all.first(where: { $0.id == cityId })?.name ?? cityId
+        let description = details.editorialSummary?.text
+            ?? "\(mode.displayName) spot in \(cityName)."
+        let category = canonicalType.map(formatType) ?? mode.displayName
+
+        return Place(
+            id: id,
+            googlePlaceId: details.id,
+            cityId: cityId,
+            name: details.displayName?.text ?? "",
             category: category,
             mode: mode,
             coordinate: Coordinate(latitude: location.latitude, longitude: location.longitude),

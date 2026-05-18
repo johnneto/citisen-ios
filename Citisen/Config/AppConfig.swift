@@ -42,7 +42,8 @@ enum AppConfig {
 
         private static let placeFieldPaths = [
             "id", "displayName", "formattedAddress", "location",
-            "rating", "userRatingCount", "priceLevel", "types",
+            "rating", "userRatingCount", "priceLevel",
+            "primaryType", "types",
             "regularOpeningHours", "currentOpeningHours", "websiteUri",
             "nationalPhoneNumber", "internationalPhoneNumber",
             "reviews", "editorialSummary", "photos"

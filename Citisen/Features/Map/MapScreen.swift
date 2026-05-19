@@ -120,7 +120,15 @@ struct MapScreen: View {
         let filtered = vm.filteredPlaces()
         let filteredIds = filtered.map(\.id)
         return Map(position: $vm.cameraPosition) {
-            UserAnnotation()
+            if let userCoord = locationService.currentLocation {
+                Annotation("", coordinate: userCoord, anchor: .center) {
+                    UserHeadingAnnotation(
+                        heading: locationService.currentHeading,
+                        mapHeading: vm.mapHeading
+                    )
+                }
+                .annotationTitles(.hidden)
+            }
             ForEach(filtered) { place in
                 Annotation(place.name, coordinate: place.coordinate.clLocation) {
                     Button {
@@ -136,8 +144,9 @@ struct MapScreen: View {
                 }
             }
         }
-        .onMapCameraChange(frequency: .onEnd) { context in
+        .onMapCameraChange(frequency: .continuous) { context in
             vm.visibleRegion = context.region
+            vm.mapHeading = context.camera.heading
         }
         .mapControls {
             MapCompass()

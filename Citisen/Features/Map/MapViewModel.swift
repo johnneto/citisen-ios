@@ -24,6 +24,7 @@ final class MapViewModel {
     private(set) var places: [Place] = []
     private(set) var phase: Phase = .idle
     var visibleRegion: MKCoordinateRegion?
+    var mapHeading: Double = 0
 
     let placesService: PlacesService
     let prefs: UserPreferencesService

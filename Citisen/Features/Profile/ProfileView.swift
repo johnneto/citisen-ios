@@ -7,10 +7,13 @@ struct ProfileView: View {
     private var cityService
     @Environment(AppRouter.self)
     private var router
+    @Environment(PlacesService.self)
+    private var places
     @Environment(\.openURL)
     private var openURL
 
     @State private var showSignOutConfirm = false
+    @State private var showClearCacheConfirm = false
 
     var body: some View {
         @Bindable var prefs = prefs
@@ -100,6 +103,17 @@ struct ProfileView: View {
                 }
             }
 
+            Section("Data") {
+                Button(role: .destructive) {
+                    showClearCacheConfirm = true
+                } label: {
+                    Label(
+                        "Clear cache for \(cityService.activeCity.name)",
+                        systemImage: "trash"
+                    )
+                }
+            }
+
             Section("About") {
                 Button {
                     router.push(.about)
@@ -158,6 +172,19 @@ struct ProfileView: View {
                 router.popToRoot()
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Clear cached spots for \(cityService.activeCity.name)?",
+            isPresented: $showClearCacheConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Clear cache", role: .destructive) {
+                places.clearCache(forCityId: cityService.activeCity.id)
+                router.showToast("Cache cleared")
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Next load will refetch suggestions from Gemini.")
         }
     }
 }

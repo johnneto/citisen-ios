@@ -16,15 +16,40 @@ struct MapScreen: View {
     private var openURL
 
     @State private var viewModel: MapViewModel?
+    @State private var poiCameraTask: Task<Void, Never>?
+    @State private var welcomeCity: City?
+    @State private var headingTracker = MapHeadingTracker()
 
     var body: some View {
         ZStack {
             if let viewModel {
                 mapContent(viewModel)
                 overlay(viewModel)
+                if case .loading = viewModel.phase {
+                    MapLoadingOverlay(mode: prefs.activeMode)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                }
             } else {
                 Color.clear
             }
+
+            if let welcomeCity {
+                CityWelcomeOverlay(city: welcomeCity)
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        // Opaque backdrop so the iOS 26 `glassEffect()` surfaces above
+        // (top bar, banners, tab bar) sample a stable color while the
+        // MapKit Metal layer reattaches on NavigationStack pop — otherwise
+        // they momentarily render against the black window background.
+        .background(AppColor.surfacePrimary.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: viewModel?.phase)
+        .animation(.easeInOut(duration: 0.25), value: welcomeCity?.id)
+        .onDisappear {
+            poiCameraTask?.cancel()
+            poiCameraTask = nil
         }
         .onAppear {
             if viewModel == nil {
@@ -35,29 +60,83 @@ struct MapScreen: View {
                     locationService: locationService
                 )
                 viewModel = vm
-                vm.reload()
+                if locationService.authorizationStatus == .notDetermined {
+                    locationService.requestWhenInUse()
+                }
+                locationService.startUpdating()
+                if locationService.currentLocation != nil {
+                    vm.centerOnUserIfAvailable()
+                } else {
+                    vm.loadInitial()
+                }
             }
         }
-        .onChange(of: cityService.activeCity) { _, _ in
-            viewModel?.recenterOnCity()
-            viewModel?.reload()
+        .onChange(of: locationService.currentLocation?.latitude) { _, _ in
+            viewModel?.centerOnUserIfAvailable()
+        }
+        .onChange(of: cityService.citySelectionEpoch) { _, _ in
+            handleCityChange()
         }
         .onChange(of: prefs.activeMode) { _, _ in
-            viewModel?.reload()
+            viewModel?.applyCacheOrIdle()
+        }
+        .onChange(of: router.recenterTrigger) { _, _ in
+            guard let id = router.poiSelectedId,
+                  let vm = viewModel,
+                  let place = vm.placesService.place(id: id) else { return }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                vm.cameraPosition = .region(MKCoordinateRegion(
+                    center: place.coordinate.clLocation,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                ))
+            }
+        }
+        .onChange(of: router.poiSelectedId) { _, newValue in
+            // Debounce so that rapid mid-swipe selection changes coalesce into a single
+            // camera animation after the swipe settles — prevents first-swipe stutter.
+            poiCameraTask?.cancel()
+            guard let newValue, let vm = viewModel else { return }
+            // Skip when MapScreen isn't the visible top of navigation or the POI
+            // sheet isn't presenting — avoids offscreen camera work during a
+            // back-pop from Saved while `poiSelectedId` is still set.
+            guard router.path.isEmpty, router.presentedSheet == .poi else { return }
+            poiCameraTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                if Task.isCancelled { return }
+                guard router.presentedSheet == .poi,
+                      router.poiSelectedId == newValue else { return }
+                guard let place = vm.placesService.place(id: newValue) else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                    vm.cameraPosition = .region(MKCoordinateRegion(
+                        center: place.coordinate.clLocation,
+                        span: vm.visibleRegion?.span ?? MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                    ))
+                }
+            }
         }
     }
 
     private func mapContent(_ vm: MapViewModel) -> some View {
         @Bindable var vm = vm
+        let filtered = vm.filteredPlaces()
+        let filteredIds = filtered.map(\.id)
         return Map(position: $vm.cameraPosition) {
-            UserAnnotation()
-            ForEach(vm.filteredPlaces()) { place in
+            if let userCoord = locationService.currentLocation {
+                Annotation("", coordinate: userCoord, anchor: .center) {
+                    UserHeadingAnnotation(
+                        locationService: locationService,
+                        tracker: headingTracker
+                    )
+                }
+                .annotationTitles(.hidden)
+            }
+            ForEach(filtered) { place in
                 Annotation(place.name, coordinate: place.coordinate.clLocation) {
                     Button {
                         #if canImport(UIKit)
                         UISelectionFeedbackGenerator().selectionChanged()
                         #endif
-                        router.openPOI(place.id)
+                        router.openPOI(place.id, in: filteredIds)
                     } label: {
                         MapPinView(mode: place.mode, isSelected: isCurrent(place))
                     }
@@ -65,16 +144,15 @@ struct MapScreen: View {
                     .accessibilityLabel(Text("\(place.name), \(place.category)"))
                 }
             }
-            if case .loading = vm.phase {
-                ForEach(Array(skeletonAnchors(for: vm).enumerated()), id: \.offset) { _, coord in
-                    Annotation("", coordinate: coord) {
-                        SkeletonPinView()
-                    }
-                }
-            }
         }
-        .onMapCameraChange(frequency: .onEnd) { context in
+        .onMapCameraChange(frequency: .continuous) { context in
+            // Both writes intentionally avoid the @Observable graph of the Map
+            // content closure: `visibleRegion` is @ObservationIgnored, and the
+            // tracker is only read inside `UserHeadingAnnotation.body`. Without
+            // this isolation a 60 Hz camera stream re-diffed every pin and
+            // flickered their shadows on tilt/move.
             vm.visibleRegion = context.region
+            headingTracker.update(context.camera.heading)
         }
         .mapControls {
             MapCompass()
@@ -85,22 +163,8 @@ struct MapScreen: View {
         .animation(.easeInOut(duration: 0.2), value: vm.phase)
     }
 
-    private func skeletonAnchors(for vm: MapViewModel) -> [CLLocationCoordinate2D] {
-        let center = vm.visibleRegion?.center ?? cityService.activeCity.center.clLocation
-        let span = vm.visibleRegion?.span.latitudeDelta ?? 0.05
-        let radius = span * 0.35
-        return (0..<6).map { index in
-            let angle = Double(index) * (.pi * 2 / 6)
-            return CLLocationCoordinate2D(
-                latitude: center.latitude + cos(angle) * radius,
-                longitude: center.longitude + sin(angle) * radius * 1.5
-            )
-        }
-    }
-
     private func isCurrent(_ place: Place) -> Bool {
-        if case .poi(let id) = router.presentedSheet, id == place.id { return true }
-        return false
+        router.presentedSheet == .poi && router.poiSelectedId == place.id
     }
 
     @ViewBuilder
@@ -126,23 +190,19 @@ struct MapScreen: View {
             )
             .padding(.horizontal, 12)
 
-            if vm.shouldOfferSearchThisArea() {
-                SearchThisAreaPill(
-                    onSearch: { vm.reload(forceRefresh: false) },
-                    onForceRefresh: { vm.reload(forceRefresh: true) }
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
             SubFilterBar(mode: prefs.activeMode, active: $vm.activeSubFilters)
         }
         .padding(.top, 54) // below safe area
-        .animation(.easeInOut(duration: 0.2), value: vm.shouldOfferSearchThisArea())
     }
 
     private func bottomSection(_ vm: MapViewModel) -> some View {
         VStack(spacing: Spacing.sm) {
+            if case .streaming = vm.phase {
+                StreamingSpotsPill(mode: prefs.activeMode)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             phaseBanner(vm)
+                .animation(.easeInOut(duration: 0.25), value: vm.phase)
             HStack {
                 Spacer()
                 NearMeFAB {
@@ -182,15 +242,42 @@ struct MapScreen: View {
     private func phaseBanner(_ vm: MapViewModel) -> some View {
         switch vm.phase {
         case .error(let message):
-            ErrorBanner(message: message) { vm.reload(forceRefresh: true) }
+            ErrorBanner(message: message) { vm.fetchSuggestions(forceRefresh: true) }
                 .padding(.horizontal, Spacing.md)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+        case .idleNeedsFetch:
+            LoadSuggestionsCard(cityName: cityService.activeCity.name, travelMode: prefs.activeMode.displayName) {
+                vm.fetchSuggestions()
+            }
+            .padding(.horizontal, Spacing.md)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         case .loaded where vm.places.isEmpty:
-            EmptyResultsCard { vm.reload(forceRefresh: true) }
+            EmptyResultsCard { vm.fetchSuggestions(forceRefresh: true) }
                 .padding(.horizontal, Spacing.md)
                 .transition(.opacity)
         default:
             EmptyView()
+        }
+    }
+
+    private func handleCityChange() {
+        guard let vm = viewModel else { return }
+        let newCity = cityService.activeCity
+        let shouldWelcome = newCity.id != prefs.lastSessionCityId
+        vm.handleCityChange()
+        if shouldWelcome {
+            showWelcome(for: newCity)
+            prefs.lastSessionCityId = newCity.id
+        }
+    }
+
+    private func showWelcome(for city: City) {
+        welcomeCity = city
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if welcomeCity?.id == city.id {
+                welcomeCity = nil
+            }
         }
     }
 }
@@ -214,59 +301,40 @@ private struct NearMeFAB: View {
     }
 }
 
-private struct SkeletonPinView: View {
-    @State private var pulse: Bool = false
+private struct LoadSuggestionsCard: View {
+    let cityName: String
+    let travelMode: String
+    let onLoad: () -> Void
 
     var body: some View {
-        Circle()
-            .fill(AppColor.surfaceElevated)
-            .frame(width: 28, height: 28)
-            .overlay(
-                Circle()
-                    .strokeBorder(AppColor.divider, lineWidth: 1)
-            )
-            .opacity(pulse ? 0.45 : 0.85)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever()) {
-                    pulse = true
-                }
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(BrandColor.sand)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Discover \(cityName)")
+                    .font(.subheadline15.weight(.semibold))
+                    .foregroundStyle(AppColor.textPrimary)
+                Text("Tap to load AI suggestions using \(travelMode) travel mode.")
+                    .font(.caption12)
+                    .foregroundStyle(AppColor.textSecondary)
             }
-            .accessibilityHidden(true)
+            Spacer(minLength: 6)
+            Button("Load", action: onLoad)
+                .font(.footnote13.weight(.semibold))
+                .tint(BrandColor.sand)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .liquidGlass(corner: 16, strength: .regular, interactive: true)
     }
 }
 
-private struct SearchThisAreaPill: View {
-    let onSearch: () -> Void
-    let onForceRefresh: () -> Void
+private struct StreamingSpotsPill: View {
+    let mode: TravelMode
 
     var body: some View {
-        HStack(spacing: 6) {
-            Button(action: onSearch) {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search this area")
-                }
-                .font(.subheadline15.weight(.semibold))
-                .foregroundStyle(AppColor.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-            }
-            .buttonStyle(.pressableScale)
-
-            Divider().frame(height: 18)
-
-            Button(action: onForceRefresh) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppColor.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.pressableScale)
-            .accessibilityLabel("Force refresh")
-        }
-        .liquidGlass(corner: 22, strength: .regular, interactive: true)
-        .padding(.horizontal, 12)
+        LiquidGlassLoader(mode: mode, label: "Finding more spots…", size: 16)
+            .accessibilityLabel("Finding more spots")
     }
 }
 

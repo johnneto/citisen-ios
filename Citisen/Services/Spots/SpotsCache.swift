@@ -1,7 +1,10 @@
+import CoreLocation
 import Foundation
 
 struct CachedList: Codable {
     let cachedAt: Date
+    let viewportCenter: Coordinate
+    let viewportRadiusKm: Double
     let places: [Place]
 }
 
@@ -43,7 +46,7 @@ final class SpotsCache {
 
     // MARK: - List
 
-    func loadList(key: String) -> [Place]? {
+    func loadEntry(key: String) -> CachedList? {
         let url = listURL(for: key)
         guard let data = try? Data(contentsOf: url),
               let entry = try? decoder.decode(CachedList.self, from: data) else {
@@ -53,13 +56,35 @@ final class SpotsCache {
             try? fileManager.removeItem(at: url)
             return nil
         }
-        return entry.places
+        return entry
     }
 
-    func saveList(key: String, places: [Place]) {
-        let entry = CachedList(cachedAt: Date(), places: places)
+    func saveList(key: String, places: [Place], viewport: Viewport) {
+        guard !places.isEmpty else { return }
+        let entry = CachedList(
+            cachedAt: Date(),
+            viewportCenter: Coordinate(
+                latitude: viewport.center.latitude,
+                longitude: viewport.center.longitude
+            ),
+            viewportRadiusKm: viewport.radiusKm,
+            places: places
+        )
         guard let data = try? encoder.encode(entry) else { return }
         try? data.write(to: listURL(for: key), options: .atomic)
+    }
+
+    // Individual `place_<uuid>.json` files are keyed by UUID and re-resolve cheaply, so we
+    // intentionally only wipe per-city list caches here; orphans expire via TTL.
+    func clearLists(forCityId cityId: String) {
+        let prefix = "list_\(sanitize(cityId))_"
+        let urls = (try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for url in urls where url.lastPathComponent.hasPrefix(prefix) {
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     // MARK: - Place

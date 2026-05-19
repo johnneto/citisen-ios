@@ -9,28 +9,159 @@ import XCTest
 @testable import Citisen
 
 final class CitisenTests: XCTestCase {
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+    // MARK: - PlaceV1 decoding
+
+    func test_PlaceV1_decodes_canonical_searchText_response() throws {
+        let json = """
+        {
+          "places": [
+            {
+              "id": "ChIJ_abc123",
+              "displayName": { "text": "Telliskivi", "languageCode": "en" },
+              "formattedAddress": "Telliskivi 60a, Tallinn",
+              "location": { "latitude": 59.4407, "longitude": 24.7297 },
+              "rating": 4.6,
+              "userRatingCount": 1234,
+              "priceLevel": "PRICE_LEVEL_MODERATE",
+              "types": ["restaurant", "bar"],
+              "regularOpeningHours": {
+                "openNow": true,
+                "weekdayDescriptions": ["Monday: 9:00 AM – 10:00 PM"]
+              },
+              "currentOpeningHours": {
+                "openNow": false,
+                "weekdayDescriptions": ["Monday: Closed"]
+              },
+              "websiteUri": "https://telliskivi.example",
+              "nationalPhoneNumber": "+372 600 0000",
+              "internationalPhoneNumber": "+372 600 0000",
+              "reviews": [
+                {
+                  "rating": 5,
+                  "text": { "text": "Loved it", "languageCode": "en" },
+                  "relativePublishTimeDescription": "2 weeks ago",
+                  "publishTime": "2026-05-01T12:00:00Z",
+                  "authorAttribution": { "displayName": "Jane Doe" }
+                }
+              ],
+              "editorialSummary": { "text": "Trendy creative city quarter.", "languageCode": "en" }
+            }
+          ]
+        }
+        """
+        let data = Data(json.utf8)
+        let response = try JSONDecoder().decode(SearchTextResponse.self, from: data)
+
+        let place = try XCTUnwrap(response.places?.first)
+        XCTAssertEqual(place.id, "ChIJ_abc123")
+        XCTAssertEqual(place.displayName?.text, "Telliskivi")
+        XCTAssertEqual(place.formattedAddress, "Telliskivi 60a, Tallinn")
+        XCTAssertEqual(place.location?.latitude, 59.4407)
+        XCTAssertEqual(place.location?.longitude, 24.7297)
+        XCTAssertEqual(place.rating, 4.6)
+        XCTAssertEqual(place.userRatingCount, 1234)
+        XCTAssertEqual(place.priceLevel, "PRICE_LEVEL_MODERATE")
+        XCTAssertEqual(place.types, ["restaurant", "bar"])
+        XCTAssertEqual(place.regularOpeningHours?.openNow, true)
+        XCTAssertEqual(place.currentOpeningHours?.weekdayDescriptions?.first, "Monday: Closed")
+        XCTAssertEqual(place.websiteUri, "https://telliskivi.example")
+        XCTAssertEqual(place.internationalPhoneNumber, "+372 600 0000")
+        XCTAssertEqual(place.editorialSummary?.text, "Trendy creative city quarter.")
+
+        let review = try XCTUnwrap(place.reviews?.first)
+        XCTAssertEqual(review.rating, 5)
+        XCTAssertEqual(review.text?.text, "Loved it")
+        XCTAssertEqual(review.relativePublishTimeDescription, "2 weeks ago")
+        XCTAssertEqual(review.authorAttribution?.displayName, "Jane Doe")
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+    func test_PlaceV1_decodes_with_missing_optionals() throws {
+        let json = """
+        { "places": [ { "id": "ChIJ_min", "displayName": { "text": "X" } } ] }
+        """
+        let data = Data(json.utf8)
+        let response = try JSONDecoder().decode(SearchTextResponse.self, from: data)
+        let place = try XCTUnwrap(response.places?.first)
+        XCTAssertEqual(place.id, "ChIJ_min")
+        XCTAssertNil(place.location)
+        XCTAssertNil(place.rating)
+        XCTAssertNil(place.reviews)
     }
 
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
-        // XCTest Documentation
-        // https://developer.apple.com/documentation/xctest
+    // MARK: - PlaceMapper
+
+    func test_PlaceMapper_mapsPriceLevelEnum() {
+        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_FREE"), 0)
+        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_INEXPENSIVE"), 1)
+        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_MODERATE"), 2)
+        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_EXPENSIVE"), 3)
+        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_VERY_EXPENSIVE"), 4)
+        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_UNSPECIFIED"), 1)
+        XCTAssertEqual(PlaceMapper.priceLevelInt(nil), 1)
     }
 
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
+    // MARK: - AppConfig field mask
+
+    // MARK: - TabBarLayout
+
+    func test_TabBarLayout_index_returnsNilWhenNotLaidOut() {
+        XCTAssertNil(TabBarLayout.index(forLocationX: 10, barWidth: 0, inset: 4, tabCount: 5))
+        XCTAssertNil(TabBarLayout.index(forLocationX: 10, barWidth: 320, inset: 4, tabCount: 0))
+    }
+
+    func test_TabBarLayout_index_splitsBarIntoEqualSlots() {
+        let width: CGFloat = 320
+        let inset: CGFloat = 4
+        // Inner width = 312 → each of 5 slots is 62.4pt
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 4, barWidth: width, inset: inset, tabCount: 5), 0)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 35, barWidth: width, inset: inset, tabCount: 5), 0)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 70, barWidth: width, inset: inset, tabCount: 5), 1)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 160, barWidth: width, inset: inset, tabCount: 5), 2)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 250, barWidth: width, inset: inset, tabCount: 5), 3)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 315, barWidth: width, inset: inset, tabCount: 5), 4)
+    }
+
+    func test_TabBarLayout_index_clampsOutOfBoundsTouches() {
+        let width: CGFloat = 320
+        XCTAssertEqual(TabBarLayout.index(forLocationX: -50, barWidth: width, inset: 4, tabCount: 5), 0)
+        XCTAssertEqual(TabBarLayout.index(forLocationX: 9999, barWidth: width, inset: 4, tabCount: 5), 4)
+    }
+
+    func test_TabBarLayout_slotIndex_skipsCenterpiece() {
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 0), 0)
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 1), 1)
+        XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: 2)) // centerpiece
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 3), 2)
+        XCTAssertEqual(TabBarLayout.slotIndex(forOrderIndex: 4), 3)
+        XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: -1))
+        XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: 5))
+    }
+
+    func test_AppConfig_searchTextFieldMask_containsAllFieldsRead() {
+        let mask = AppConfig.Endpoints.searchTextFieldMask
+        let required = [
+            "places.id",
+            "places.displayName",
+            "places.formattedAddress",
+            "places.location",
+            "places.rating",
+            "places.userRatingCount",
+            "places.priceLevel",
+            "places.types",
+            "places.regularOpeningHours",
+            "places.currentOpeningHours",
+            "places.websiteUri",
+            "places.nationalPhoneNumber",
+            "places.internationalPhoneNumber",
+            "places.reviews",
+            "places.editorialSummary",
+            "places.photos"
+        ]
+        for path in required {
+            XCTAssertTrue(
+                mask.contains(path),
+                "searchTextFieldMask is missing required field path: \(path)"
+            )
         }
     }
 }

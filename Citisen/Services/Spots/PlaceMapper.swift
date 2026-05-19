@@ -2,41 +2,44 @@ import Foundation
 
 enum PlaceMapper {
     static func makePlace(
-        from details: PlaceDetailsPayload,
+        from details: PlaceV1,
         curated: CuratedSpot,
         city: City,
         mode: TravelMode
     ) -> Place? {
-        guard let location = details.geometry?.location else { return nil }
-        let id = Place.id(forGooglePlaceId: details.placeId)
-        let openNow = details.currentOpeningHours?.openNow ?? details.openingHours?.openNow ?? false
-        let weekday = details.currentOpeningHours?.weekdayText ?? details.openingHours?.weekdayText ?? []
+        guard let location = details.location else { return nil }
+        let id = Place.id(forGooglePlaceId: details.id)
+        let openNow = details.currentOpeningHours?.openNow ?? details.regularOpeningHours?.openNow ?? false
+        let weekday = details.currentOpeningHours?.weekdayDescriptions
+            ?? details.regularOpeningHours?.weekdayDescriptions
+            ?? []
 
         var tags: [String] = []
         if let neighborhood = curated.neighborhood, !neighborhood.isEmpty {
             tags.append(neighborhood)
         }
-        if let primaryType = details.types?.first {
-            tags.append(formatType(primaryType))
+        let canonicalType = details.primaryType ?? details.types?.first
+        if let canonicalType {
+            tags.append(formatType(canonicalType))
         }
 
         let description = curated.rationale
-            ?? details.editorialSummary?.overview
+            ?? details.editorialSummary?.text
             ?? "\(mode.displayName) spot in \(city.name)."
 
-        let category = details.types?.first.map(formatType) ?? mode.displayName
+        let category = canonicalType.map(formatType) ?? mode.displayName
 
         return Place(
             id: id,
-            googlePlaceId: details.placeId,
+            googlePlaceId: details.id,
             cityId: city.id,
-            name: details.name ?? curated.name,
+            name: details.displayName?.text ?? curated.name,
             category: category,
             mode: mode,
-            coordinate: Coordinate(latitude: location.lat, longitude: location.lng),
+            coordinate: Coordinate(latitude: location.latitude, longitude: location.longitude),
             rating: details.rating ?? 0,
-            reviewCount: details.userRatingsTotal ?? 0,
-            priceLevel: details.priceLevel ?? 1,
+            reviewCount: details.userRatingCount ?? 0,
+            priceLevel: priceLevelInt(details.priceLevel),
             description: description,
             tags: tags,
             openingHours: openingHours(from: weekday),
@@ -44,9 +47,82 @@ enum PlaceMapper {
             closesAt: closesAt(from: weekday),
             reviews: details.reviews?.compactMap(makeReview) ?? [],
             address: details.formattedAddress ?? "",
-            website: details.website.flatMap { URL(string: $0) },
-            phone: details.internationalPhoneNumber ?? details.formattedPhoneNumber
+            website: details.websiteUri.flatMap { URL(string: $0) },
+            phone: details.internationalPhoneNumber ?? details.nationalPhoneNumber,
+            photoNames: photoNames(from: details.photos),
+            businessStatus: businessStatus(details.businessStatus)
         )
+    }
+
+    /// Builds a `Place` from a refetched `PlaceV1` when no curated metadata is
+    /// available (e.g. opening a saved spot after its Gemini cache expired).
+    /// Uses the persisted `cityId` and `mode` from the saved entity.
+    static func makePlace(
+        from details: PlaceV1,
+        cityId: String,
+        mode: TravelMode
+    ) -> Place? {
+        guard let location = details.location else { return nil }
+        let id = Place.id(forGooglePlaceId: details.id)
+        let openNow = details.currentOpeningHours?.openNow ?? details.regularOpeningHours?.openNow ?? false
+        let weekday = details.currentOpeningHours?.weekdayDescriptions
+            ?? details.regularOpeningHours?.weekdayDescriptions
+            ?? []
+
+        var tags: [String] = []
+        let canonicalType = details.primaryType ?? details.types?.first
+        if let canonicalType {
+            tags.append(formatType(canonicalType))
+        }
+
+        let cityName = City.all.first(where: { $0.id == cityId })?.name ?? cityId
+        let description = details.editorialSummary?.text
+            ?? "\(mode.displayName) spot in \(cityName)."
+        let category = canonicalType.map(formatType) ?? mode.displayName
+
+        return Place(
+            id: id,
+            googlePlaceId: details.id,
+            cityId: cityId,
+            name: details.displayName?.text ?? "",
+            category: category,
+            mode: mode,
+            coordinate: Coordinate(latitude: location.latitude, longitude: location.longitude),
+            rating: details.rating ?? 0,
+            reviewCount: details.userRatingCount ?? 0,
+            priceLevel: priceLevelInt(details.priceLevel),
+            description: description,
+            tags: tags,
+            openingHours: openingHours(from: weekday),
+            isOpenNow: openNow,
+            closesAt: closesAt(from: weekday),
+            reviews: details.reviews?.compactMap(makeReview) ?? [],
+            address: details.formattedAddress ?? "",
+            website: details.websiteUri.flatMap { URL(string: $0) },
+            phone: details.internationalPhoneNumber ?? details.nationalPhoneNumber,
+            photoNames: photoNames(from: details.photos),
+            businessStatus: businessStatus(details.businessStatus)
+        )
+    }
+
+    private static func businessStatus(_ raw: String?) -> BusinessStatus {
+        switch raw {
+        case "OPERATIONAL":         return .operational
+        case "CLOSED_TEMPORARILY":  return .closedTemporarily
+        case "CLOSED_PERMANENTLY":  return .closedPermanently
+        default:                    return .unknown
+        }
+    }
+
+    static func priceLevelInt(_ value: String?) -> Int {
+        switch value {
+        case "PRICE_LEVEL_FREE": return 0
+        case "PRICE_LEVEL_INEXPENSIVE": return 1
+        case "PRICE_LEVEL_MODERATE": return 2
+        case "PRICE_LEVEL_EXPENSIVE": return 3
+        case "PRICE_LEVEL_VERY_EXPENSIVE": return 4
+        default: return 1
+        }
     }
 
     private static func formatType(_ type: String) -> String {
@@ -54,7 +130,7 @@ enum PlaceMapper {
     }
 
     private static func openingHours(from weekday: [String]) -> OpeningHours {
-        // Google's weekday_text starts with Monday and is "Day: hours" format.
+        // Google's weekday descriptions start with Monday and use "Day: hours" format.
         func hours(at index: Int) -> String? {
             guard weekday.indices.contains(index) else { return nil }
             let parts = weekday[index].split(separator: ":", maxSplits: 1)
@@ -80,12 +156,17 @@ enum PlaceMapper {
         return String(line[dashRange.upperBound...]).trimmingCharacters(in: .whitespaces)
     }
 
-    private static func makeReview(_ payload: PlaceReview) -> Review? {
-        guard let rating = payload.rating, let text = payload.text else { return nil }
-        let daysAgo = parseDaysAgo(payload.relativeTimeDescription)
+    private static func photoNames(from photos: [PhotoV1]?) -> [String]? {
+        guard let photos, !photos.isEmpty else { return nil }
+        return Array(photos.prefix(AppConfig.Spots.maxPhotosPerPlace)).map(\.name)
+    }
+
+    private static func makeReview(_ payload: ReviewV1) -> Review? {
+        guard let rating = payload.rating, let text = payload.text?.text else { return nil }
+        let daysAgo = parseDaysAgo(payload.relativePublishTimeDescription)
         return Review(
             id: UUID(),
-            authorName: payload.authorName ?? "Anonymous",
+            authorName: payload.authorAttribution?.displayName ?? "Anonymous",
             rating: rating,
             daysAgo: daysAgo,
             text: text

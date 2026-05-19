@@ -2,29 +2,44 @@ import Foundation
 import Observation
 import SwiftData
 
+struct CityInfo {
+    let name: String
+    let country: String
+    let flag: String
+}
+
 @Observable
 @MainActor
 final class POISheetViewModel {
     let place: Place
     var isSaveMenuOpen: Bool = false
-    var currentRating: SavedSpotRating?
     var isHoursExpanded: Bool = false
 
     private let savedSpots: SavedSpotsService
+    private let cityInfoProvider: () -> CityInfo?
 
-    init(place: Place, context: ModelContext) {
+    init(
+        place: Place,
+        context: ModelContext,
+        cityInfoProvider: @escaping () -> CityInfo? = { nil }
+    ) {
         self.place = place
         self.savedSpots = SavedSpotsService(context: context)
-        self.currentRating = savedSpots.savedRating(for: place.id)
+        self.cityInfoProvider = cityInfoProvider
     }
 
-    func pick(_ rating: SavedSpotRating) {
+    func pick(_ rating: SavedSpotRating, currentRating: SavedSpotRating?) {
         if currentRating == rating {
             savedSpots.unsave(placeId: place.id)
-            currentRating = nil
         } else {
-            savedSpots.setRating(rating, for: place)
-            currentRating = rating
+            let info = cityInfoProvider()
+            savedSpots.setRating(
+                rating,
+                for: place,
+                cityName: info?.name,
+                countryName: info?.country,
+                emojiFlag: info?.flag
+            )
         }
         isSaveMenuOpen = false
     }

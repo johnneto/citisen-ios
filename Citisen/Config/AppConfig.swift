@@ -13,9 +13,25 @@ enum AppConfig {
     enum Spots {
         static let cacheTTLDays: Double = 30
         static var cacheTTLSeconds: TimeInterval { cacheTTLDays * 86_400 }
-        static let maxSpotsPerRequest = 10
-        static let placesConcurrency = 4
-        static let searchAreaTriggerMeters: CLLocationDistance = 1_000
+        static let minSpotsPerRequest = 20
+        static let maxSpotsPerRequest = 60
+        static let placesConcurrency = 8
+        static let maxPhotosPerPlace = 10
+        static let photoMaxWidthPx = 1_200
+        static let photoMaxHeightPx = 800
+        static let initialPhotoBatchSize = 5
+        static let photoBatchIncrement = 5
+        static let photoCacheTTLDays: Double = 3
+        static var photoCacheTTLSeconds: TimeInterval { photoCacheTTLDays * 86_400 }
+        static let photoCacheDiskCapBytes = 75 * 1_024 * 1_024
+        static let photoCacheMemoryCapBytes = 30 * 1_024 * 1_024
+    }
+
+    enum CitySearch {
+        /// Debounce window before firing an autocomplete request as the user types.
+        static let debounceMilliseconds: Int = 250
+        /// Default span (km) used to recenter the camera on a freshly-selected city.
+        static let defaultSpanKm: Double = 8
     }
 
     enum Endpoints {
@@ -25,14 +41,30 @@ enum AppConfig {
             "\(geminiBase)/models/\(geminiModel):generateContent"
         }
 
-        static let placesFindFromText = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-        static let placesDetails = "https://maps.googleapis.com/maps/api/place/details/json"
-        static let placeDetailsFields = [
-            "place_id", "name", "formatted_address", "geometry",
-            "rating", "user_ratings_total", "price_level", "types",
-            "opening_hours", "current_opening_hours", "website",
-            "formatted_phone_number", "international_phone_number",
-            "reviews", "editorial_summary"
+        static let placesBase = "https://places.googleapis.com/v1"
+        static let placesSearchText = "\(placesBase)/places:searchText"
+        static let placesAutocomplete = "\(placesBase)/places:autocomplete"
+        static let placesDetailsBase = "\(placesBase)/places"
+
+        private static let placeFieldPaths = [
+            "id", "displayName", "formattedAddress", "location",
+            "rating", "userRatingCount", "priceLevel",
+            "primaryType", "types",
+            "regularOpeningHours", "currentOpeningHours", "websiteUri",
+            "nationalPhoneNumber", "internationalPhoneNumber",
+            "reviews", "editorialSummary", "photos",
+            "businessStatus"
+        ]
+
+        static let searchTextFieldMask = placeFieldPaths
+            .map { "places.\($0)" }
+            .joined(separator: ",")
+        static let placeDetailsFieldMask = placeFieldPaths.joined(separator: ",")
+
+        /// Field mask for the lighter city-details payload used after autocomplete
+        /// selection — only the fields needed to build a `City`.
+        static let cityDetailsFieldMask = [
+            "id", "displayName", "location", "addressComponents", "formattedAddress"
         ].joined(separator: ",")
     }
 
@@ -45,6 +77,6 @@ enum AppConfig {
 enum FeatureFlags {
     static let aiCurationEnabled = true
     static let googlePlacesEnabled = true
-    static let analyticsEnabled = false
+    static let analyticsEnabled = true
     static let crashReportingEnabled = false
 }

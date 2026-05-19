@@ -3,13 +3,13 @@ import Foundation
 enum SavedGroupFilter: Hashable {
     case country(name: String, flag: String)
     case city(cityId: String)
-    case mode(TravelMode)
+    case category(String)
 
     var title: String {
         switch self {
         case .country(let name, _): return name
         case .city(let id): return City.all.first(where: { $0.id == id })?.name ?? id
-        case .mode(let mode): return mode.displayName
+        case .category(let category): return category
         }
     }
 }
@@ -28,7 +28,8 @@ enum AppSheet: Identifiable, Hashable {
     case citySwitcher
     case modePicker(slotIndex: Int)
     case newCollection
-    case poi(placeId: UUID)
+    case poi
+    case placesList
 
     var id: String {
         switch self {
@@ -36,7 +37,8 @@ enum AppSheet: Identifiable, Hashable {
         case .citySwitcher: return "city"
         case .modePicker(let idx): return "mode-\(idx)"
         case .newCollection: return "new-collection"
-        case .poi(let id): return "poi-\(id.uuidString)"
+        case .poi: return "poi"
+        case .placesList: return "places-list"
         }
     }
 }

@@ -4,6 +4,10 @@ struct CuratedSpot: Codable, Hashable {
     let name: String
     let neighborhood: String?
     let rationale: String?
+    /// Closest Google Places (New) primary type — used as `includedType` hint
+    /// when resolving the spot via `places:searchText` to avoid ambiguous-name
+    /// mismatches (e.g. a yoga studio matching a query meant for a church).
+    let primaryType: String?
 }
 
 struct GeminiRequest: Encodable {
@@ -25,6 +29,11 @@ struct GeminiGenerationConfig: Encodable {
     let responseSchema: GeminiSchema
     let temperature: Double
     let maxOutputTokens: Int
+    let thinkingConfig: GeminiThinkingConfig?
+}
+
+struct GeminiThinkingConfig: Encodable {
+    let thinkingBudget: Int
 }
 
 struct GeminiSchema: Encodable {
@@ -38,7 +47,8 @@ struct GeminiSchema: Encodable {
             properties: [
                 "name": GeminiSchemaProperty(type: "STRING"),
                 "neighborhood": GeminiSchemaProperty(type: "STRING"),
-                "rationale": GeminiSchemaProperty(type: "STRING")
+                "rationale": GeminiSchemaProperty(type: "STRING"),
+                "primaryType": GeminiSchemaProperty(type: "STRING")
             ],
             required: ["name"]
         )
@@ -62,6 +72,7 @@ struct GeminiResponse: Decodable {
 
 struct GeminiCandidate: Decodable {
     let content: GeminiCandidateContent?
+    let finishReason: String?
 }
 
 struct GeminiCandidateContent: Decodable {

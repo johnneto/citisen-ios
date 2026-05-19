@@ -5,19 +5,22 @@ import SwiftData
 final class SavedSpotEntity {
     @Attribute(.unique)
     var placeId: UUID
+    var googlePlaceId: String?
     var placeName: String
     var placeCategory: String
     var modeRaw: String
     var ratingRaw: String
     var note: String?
     var savedAt: Date
-    var cityId: String
-    var cityName: String
-    var countryName: String
+    var cityId: String = ""
+    var cityName: String = ""
+    var countryName: String = ""
+    var emojiFlag: String = ""
     var collection: CollectionEntity?
 
     init(
         placeId: UUID,
+        googlePlaceId: String? = nil,
         placeName: String,
         placeCategory: String,
         mode: TravelMode,
@@ -26,9 +29,11 @@ final class SavedSpotEntity {
         cityId: String,
         cityName: String = "",
         countryName: String = "",
+        emojiFlag: String = "",
         collection: CollectionEntity? = nil
     ) {
         self.placeId = placeId
+        self.googlePlaceId = googlePlaceId
         self.placeName = placeName
         self.placeCategory = placeCategory
         self.modeRaw = mode.rawValue
@@ -38,6 +43,7 @@ final class SavedSpotEntity {
         self.cityId = cityId
         self.cityName = cityName
         self.countryName = countryName
+        self.emojiFlag = emojiFlag
         self.collection = collection
     }
 
@@ -58,6 +64,7 @@ final class SavedSpotEntity {
     }
 
     var resolvedFlag: String {
-        City.all.first(where: { $0.id == cityId })?.emojiFlag ?? ""
+        if !emojiFlag.isEmpty { return emojiFlag }
+        return City.all.first(where: { $0.id == cityId })?.emojiFlag ?? ""
     }
 }

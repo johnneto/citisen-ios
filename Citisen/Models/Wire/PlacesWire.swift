@@ -1,108 +1,146 @@
 import Foundation
 
-struct FindPlaceResponse: Decodable {
-    let candidates: [FindPlaceCandidate]?
-    let status: String
-    let errorMessage: String?
+// MARK: - Request
 
-    enum CodingKeys: String, CodingKey {
-        case candidates
-        case status
-        case errorMessage = "error_message"
+struct SearchTextRequest: Encodable {
+    let textQuery: String
+    let locationBias: LocationBias
+    let maxResultCount: Int
+    let includedType: String?
+    let strictTypeFiltering: Bool?
+
+    struct LocationBias: Encodable {
+        let circle: Circle
+
+        struct Circle: Encodable {
+            let center: LatLngV1
+            let radius: Double
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case textQuery, locationBias, maxResultCount, includedType, strictTypeFiltering
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(textQuery, forKey: .textQuery)
+        try container.encode(locationBias, forKey: .locationBias)
+        try container.encode(maxResultCount, forKey: .maxResultCount)
+        try container.encodeIfPresent(includedType, forKey: .includedType)
+        try container.encodeIfPresent(strictTypeFiltering, forKey: .strictTypeFiltering)
     }
 }
 
-struct FindPlaceCandidate: Decodable {
-    let placeId: String
+// MARK: - Response
 
-    enum CodingKeys: String, CodingKey {
-        case placeId = "place_id"
-    }
+struct SearchTextResponse: Decodable {
+    let places: [PlaceV1]?
 }
 
-struct PlaceDetailsResponse: Decodable {
-    let result: PlaceDetailsPayload?
-    let status: String
-    let errorMessage: String?
-
-    enum CodingKeys: String, CodingKey {
-        case result
-        case status
-        case errorMessage = "error_message"
-    }
-}
-
-struct PlaceDetailsPayload: Decodable {
-    let placeId: String
-    let name: String?
+struct PlaceV1: Decodable {
+    let id: String
+    let displayName: LocalizedText?
     let formattedAddress: String?
-    let geometry: PlaceGeometry?
+    let location: LatLngV1?
     let rating: Double?
-    let userRatingsTotal: Int?
-    let priceLevel: Int?
+    let userRatingCount: Int?
+    let priceLevel: String?
+    let primaryType: String?
     let types: [String]?
-    let openingHours: PlaceOpeningHours?
-    let currentOpeningHours: PlaceOpeningHours?
-    let website: String?
-    let formattedPhoneNumber: String?
+    let regularOpeningHours: OpeningHoursV1?
+    let currentOpeningHours: OpeningHoursV1?
+    let websiteUri: String?
+    let nationalPhoneNumber: String?
     let internationalPhoneNumber: String?
-    let reviews: [PlaceReview]?
-    let editorialSummary: PlaceEditorialSummary?
-
-    enum CodingKeys: String, CodingKey {
-        case placeId = "place_id"
-        case name
-        case formattedAddress = "formatted_address"
-        case geometry
-        case rating
-        case userRatingsTotal = "user_ratings_total"
-        case priceLevel = "price_level"
-        case types
-        case openingHours = "opening_hours"
-        case currentOpeningHours = "current_opening_hours"
-        case website
-        case formattedPhoneNumber = "formatted_phone_number"
-        case internationalPhoneNumber = "international_phone_number"
-        case reviews
-        case editorialSummary = "editorial_summary"
-    }
+    let reviews: [ReviewV1]?
+    let editorialSummary: LocalizedText?
+    let photos: [PhotoV1]?
+    let addressComponents: [AddressComponentV1]?
+    let businessStatus: String?
 }
 
-struct PlaceGeometry: Decodable {
-    let location: PlaceLatLng
+struct AddressComponentV1: Decodable {
+    let longText: String?
+    let shortText: String?
+    let types: [String]?
 }
 
-struct PlaceLatLng: Decodable {
-    let lat: Double
-    let lng: Double
+// MARK: - Autocomplete (New)
+
+struct AutocompleteRequest: Encodable {
+    let input: String
+    let sessionToken: String
+    let includedPrimaryTypes: [String]?
+    let languageCode: String?
 }
 
-struct PlaceOpeningHours: Decodable {
-    let openNow: Bool?
-    let weekdayText: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case openNow = "open_now"
-        case weekdayText = "weekday_text"
-    }
+struct AutocompleteResponse: Decodable {
+    let suggestions: [AutocompleteSuggestion]?
 }
 
-struct PlaceReview: Decodable {
-    let authorName: String?
-    let rating: Int?
+struct AutocompleteSuggestion: Decodable {
+    let placePrediction: PlacePrediction?
+}
+
+struct PlacePrediction: Decodable {
+    let placeId: String?
+    let text: FormattableText?
+    let structuredFormat: StructuredFormat?
+    let types: [String]?
+}
+
+struct FormattableText: Decodable {
     let text: String?
-    let relativeTimeDescription: String?
-    let time: TimeInterval?
-
-    enum CodingKeys: String, CodingKey {
-        case authorName = "author_name"
-        case rating
-        case text
-        case relativeTimeDescription = "relative_time_description"
-        case time
-    }
 }
 
-struct PlaceEditorialSummary: Decodable {
-    let overview: String?
+struct StructuredFormat: Decodable {
+    let mainText: FormattableText?
+    let secondaryText: FormattableText?
+}
+
+struct PhotoV1: Decodable {
+    let name: String
+    let widthPx: Int?
+    let heightPx: Int?
+    let authorAttributions: [AuthorAttribution]?
+}
+
+struct LocalizedText: Decodable {
+    let text: String?
+    let languageCode: String?
+}
+
+struct LatLngV1: Codable {
+    let latitude: Double
+    let longitude: Double
+}
+
+struct OpeningHoursV1: Decodable {
+    let openNow: Bool?
+    let weekdayDescriptions: [String]?
+}
+
+struct ReviewV1: Decodable {
+    let rating: Int?
+    let text: LocalizedText?
+    let relativePublishTimeDescription: String?
+    let publishTime: String?
+    let authorAttribution: AuthorAttribution?
+}
+
+struct AuthorAttribution: Decodable {
+    let displayName: String?
+}
+
+// MARK: - Error envelope
+
+struct PlacesErrorEnvelope: Decodable {
+    let error: PlacesErrorBody
+}
+
+struct PlacesErrorBody: Decodable {
+    let code: Int?
+    let message: String?
+    let status: String?
 }

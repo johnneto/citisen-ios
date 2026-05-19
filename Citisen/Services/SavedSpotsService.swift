@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 @MainActor
@@ -7,6 +8,14 @@ final class SavedSpotsService {
 
     init(context: ModelContext) {
         self.context = context
+    }
+
+    private func persist(_ op: StaticString) {
+        do {
+            try context.save()
+        } catch {
+            AppLog.data.error("SavedSpotsService.\(op, privacy: .public) save failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - Spots
@@ -23,34 +32,71 @@ final class SavedSpotsService {
         return (try? context.fetch(descriptor))?.first
     }
 
-    func setRating(_ rating: SavedSpotRating, for place: Place) {
+    func setRating(
+        _ rating: SavedSpotRating,
+        for place: Place,
+        cityName: String? = nil,
+        countryName: String? = nil,
+        emojiFlag: String? = nil
+    ) {
+        let fallback = City.all.first(where: { $0.id == place.cityId })
+        let resolvedCityName: String = {
+            if let cityName, !cityName.isEmpty { return cityName }
+            return fallback?.name ?? ""
+        }()
+        let resolvedCountryName: String = {
+            if let countryName, !countryName.isEmpty { return countryName }
+            return fallback?.country ?? ""
+        }()
+        let resolvedFlag: String = {
+            if let emojiFlag, !emojiFlag.isEmpty { return emojiFlag }
+            return fallback?.emojiFlag ?? ""
+        }()
+
         if let existing = spot(for: place.id) {
+            if existing.googlePlaceId == nil, let gpid = place.googlePlaceId {
+                existing.googlePlaceId = gpid
+            }
+            if existing.cityName.isEmpty, !resolvedCityName.isEmpty {
+                existing.cityName = resolvedCityName
+            }
+            if existing.countryName.isEmpty, !resolvedCountryName.isEmpty {
+                existing.countryName = resolvedCountryName
+            }
+            if existing.emojiFlag.isEmpty, !resolvedFlag.isEmpty {
+                existing.emojiFlag = resolvedFlag
+            }
             if existing.rating == rating {
                 context.delete(existing)
             } else {
                 existing.ratingRaw = rating.rawValue
             }
         } else {
-            let city = City.all.first(where: { $0.id == place.cityId })
             let entity = SavedSpotEntity(
                 placeId: place.id,
+                googlePlaceId: place.googlePlaceId,
                 placeName: place.name,
                 placeCategory: place.category,
                 mode: place.mode,
                 rating: rating,
                 cityId: place.cityId,
-                cityName: city?.name ?? "",
-                countryName: city?.country ?? ""
+                cityName: resolvedCityName,
+                countryName: resolvedCountryName,
+                emojiFlag: resolvedFlag
             )
             context.insert(entity)
         }
-        try? context.save()
+        persist("setRating")
+    }
+
+    func googlePlaceId(for placeId: UUID) -> String? {
+        spot(for: placeId)?.googlePlaceId
     }
 
     func unsave(placeId: UUID) {
         guard let existing = spot(for: placeId) else { return }
         context.delete(existing)
-        try? context.save()
+        persist("unsave")
     }
 
     func allSpots() -> [SavedSpotEntity] {
@@ -85,27 +131,27 @@ final class SavedSpotsService {
             iconSymbol: iconSymbol
         )
         context.insert(entity)
-        try? context.save()
+        persist("collection")
         return entity
     }
 
     func delete(_ collection: CollectionEntity) {
         context.delete(collection)
-        try? context.save()
+        persist("collection")
     }
 
     func rename(_ collection: CollectionEntity, to name: String) {
         collection.name = name
-        try? context.save()
+        persist("collection")
     }
 
     func addSpot(_ spot: SavedSpotEntity, to collection: CollectionEntity) {
         spot.collection = collection
-        try? context.save()
+        persist("collection")
     }
 
     func removeSpot(_ spot: SavedSpotEntity) {
         context.delete(spot)
-        try? context.save()
+        persist("collection")
     }
 }

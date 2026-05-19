@@ -24,6 +24,18 @@ struct MainTabHostView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
+                if router.presentedSheet == .poi,
+                   router.poiDetent != .large,
+                   router.poiPlaceIds.count > 1,
+                   let selectedId = router.poiSelectedId,
+                   let currentIndex = router.poiPlaceIds.firstIndex(of: selectedId) {
+                    poiFloatingOverlay(
+                        currentIndex: currentIndex + 1,
+                        total: router.poiPlaceIds.count
+                    )
+                    .zIndex(50)
+                }
+
                 HamburgerMenuView()
                     .zIndex(100)
             }
@@ -76,6 +88,10 @@ struct MainTabHostView: View {
                 .presentationDragIndicator(.visible)
         case .poi:
             poiPager()
+        case .placesList:
+            PlacesListView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -95,6 +111,35 @@ struct MainTabHostView: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// Renders the floating pills outside the POI sheet so they sit above its
+    /// top edge. Position is computed from the current detent — the sheet
+    /// itself runs `presentationBackgroundInteraction(.enabled)` so the pills
+    /// are tappable and the underlying map isn't dimmed.
+    @ViewBuilder
+    private func poiFloatingOverlay(currentIndex: Int, total: Int) -> some View {
+        VStack {
+            Spacer()
+            POIFloatingPills(
+                currentIndex: currentIndex,
+                total: total,
+                onOpenList: { router.openPlacesListFromPOI() }
+            )
+            .padding(.bottom, Self.sheetTopOffset(for: router.poiDetent))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.keyboard)
+        .opacity(router.isPOISheetSettling ? 0 : 1)
+        .animation(.easeInOut(duration: 0.18), value: router.isPOISheetSettling)
+        .allowsHitTesting(!router.isPOISheetSettling)
+    }
+
+    private static func sheetTopOffset(for detent: PresentationDetent) -> CGFloat {
+        // Visual offset from the bottom of the screen to *just above* the
+        // sheet's top edge, in points. Tracks the fixed detent heights.
+        if detent == .height(600) { return 600 + 8 }
+        return 340 + 8
+    }
+
     @ViewBuilder
     private func poiPager() -> some View {
         @Bindable var router = router
@@ -107,14 +152,10 @@ struct MainTabHostView: View {
         GeometryReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 0) {
-                    ForEach(Array(ids.enumerated()), id: \.element) { index, id in
-                        POIPage(
-                            placeId: id,
-                            pageIndex: ids.count > 1 ? index : nil,
-                            pageCount: ids.count > 1 ? ids.count : nil
-                        )
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                        .id(id)
+                    ForEach(ids, id: \.self) { id in
+                        POIPage(placeId: id)
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .id(id)
                     }
                 }
                 .scrollTargetLayout()
@@ -123,12 +164,23 @@ struct MainTabHostView: View {
             .scrollPosition(id: $router.poiSelectedId)
         }
         .ignoresSafeArea(.container, edges: .horizontal)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size.height) { _, _ in
+                        router.notePOISheetHeightChange()
+                    }
+            }
+        )
         .presentationDetents(
             [.height(340), .height(600), .large],
             selection: $router.poiDetent
         )
         .presentationDragIndicator(.visible)
         .presentationBackground(AppColor.surfaceElevated)
+        // Disables the dim layer and lets taps reach the floating pills overlay
+        // rendered above the sheet's top edge in the parent ZStack.
+        .presentationBackgroundInteraction(.enabled(upThrough: .height(600)))
     }
 
     private func toastView(_ text: String) -> some View {
@@ -171,13 +223,9 @@ private struct POIPage: View {
     @State private var transientFailure = false
 
     let placeId: UUID
-    let pageIndex: Int?
-    let pageCount: Int?
 
-    init(placeId: UUID, pageIndex: Int?, pageCount: Int?) {
+    init(placeId: UUID) {
         self.placeId = placeId
-        self.pageIndex = pageIndex
-        self.pageCount = pageCount
         _savedQuery = Query(filter: #Predicate<SavedSpotEntity> { $0.placeId == placeId })
     }
 
@@ -186,11 +234,7 @@ private struct POIPage: View {
     var body: some View {
         Group {
             if let place = resolved {
-                POISheetView(
-                    place: place,
-                    pageIndex: pageIndex,
-                    pageCount: pageCount
-                )
+                POISheetView(place: place)
             } else if notFound {
                 notFoundView
             } else if transientFailure {

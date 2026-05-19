@@ -1,12 +1,13 @@
 import MapKit
 import SwiftData
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // swiftlint:disable:next type_body_length
 struct POISheetView: View {
     let place: Place
-    var pageIndex: Int?
-    var pageCount: Int?
 
     @Environment(\.modelContext)
     private var modelContext
@@ -26,11 +27,11 @@ struct POISheetView: View {
     @State private var viewModel: POISheetViewModel?
     @State private var showMoreReviewsAlert = false
     @State private var showVoiceAlert = false
+    @State private var didCopyAddress = false
+    @State private var viewerPhotoIndex: Int?
 
-    init(place: Place, pageIndex: Int? = nil, pageCount: Int? = nil) {
+    init(place: Place) {
         self.place = place
-        self.pageIndex = pageIndex
-        self.pageCount = pageCount
         let pid = place.id
         _savedQueryResults = Query(filter: #Predicate<SavedSpotEntity> { $0.placeId == pid })
     }
@@ -135,6 +136,21 @@ struct POISheetView: View {
         .alert("Voice search coming soon", isPresented: $showVoiceAlert) {
             Button("OK", role: .cancel) {}
         }
+        .fullScreenCover(item: Binding(
+            get: { viewerPhotoIndex.map(PhotoViewerPresentation.init) },
+            set: { viewerPhotoIndex = $0?.index }
+        )) { presentation in
+            PhotoViewerView(
+                photoNames: place.photoNames ?? [],
+                initialIndex: presentation.index,
+                mode: place.mode
+            )
+        }
+    }
+
+    private struct PhotoViewerPresentation: Identifiable {
+        let index: Int
+        var id: Int { index }
     }
 
     // MARK: - Header
@@ -142,16 +158,7 @@ struct POISheetView: View {
     private var header: some View {
         HStack(spacing: 8) {
             ModeChip(mode: place.mode, style: .tint)
-            if let pageIndex, let pageCount, pageCount > 1 {
-                Text("\(pageIndex + 1) / \(pageCount)")
-                    .font(.caption12.weight(.semibold))
-                    .foregroundStyle(AppColor.textSecondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(AppColor.surfaceGrouped)
-                    .clipShape(Capsule())
-                    .accessibilityLabel("Place \(pageIndex + 1) of \(pageCount)")
-            }
+            closedBadge
             Spacer()
             Button {
                 dismiss()
@@ -167,6 +174,17 @@ struct POISheetView: View {
         }
     }
 
+    @ViewBuilder private var closedBadge: some View {
+        switch place.businessStatus {
+        case .closedTemporarily:
+            ClosedStatusBadge(text: "Temporarily closed")
+        case .closedPermanently:
+            ClosedStatusBadge(text: "Permanently closed")
+        default:
+            EmptyView()
+        }
+    }
+
     private var titleAndMeta: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(place.name)
@@ -174,6 +192,16 @@ struct POISheetView: View {
                 .foregroundStyle(AppColor.textPrimary)
                 .kerning(-0.5)
                 .lineLimit(2)
+                .contentShape(Rectangle())
+                .onTapGesture { focusMapOnPlace() }
+                .contextMenu {
+                    Button {
+                        copyName()
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                }
+                .accessibilityHint("Double tap to focus map on this place. Long press to copy name.")
 
             HStack(spacing: 8) {
                 Text(place.formattedDistance(from: cityService.activeCity.center.clLocation) + " away")
@@ -230,14 +258,20 @@ struct POISheetView: View {
             HStack(spacing: 8) {
                 if let photoNames = place.photoNames, !photoNames.isEmpty {
                     ForEach(Array(photoNames.enumerated()), id: \.offset) { index, name in
-                        PlacePhotoView(
-                            photoName: name,
-                            mode: place.mode,
-                            seed: "\(place.id.uuidString)-\(index)",
-                            height: photoHeight,
-                            cornerRadius: Radius.md
-                        )
-                        .frame(width: photoWidth)
+                        Button {
+                            viewerPhotoIndex = index
+                        } label: {
+                            PlacePhotoView(
+                                photoName: name,
+                                mode: place.mode,
+                                seed: "\(place.id.uuidString)-\(index)",
+                                height: photoHeight,
+                                cornerRadius: Radius.md
+                            )
+                            .frame(width: photoWidth)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open photo \(index + 1) of \(photoNames.count)")
                     }
                 } else {
                     ForEach(0..<3, id: \.self) { index in
@@ -265,31 +299,55 @@ struct POISheetView: View {
 
     private func hoursBlock(vm: POISheetViewModel) -> some View {
         @Bindable var vm = vm
+        let isBusinessClosed = place.businessStatus == .closedTemporarily
+            || place.businessStatus == .closedPermanently
+        let hasHours = place.openingHours.hasAny
+        let isCollapsible = !isBusinessClosed && hasHours
         return VStack(alignment: .leading, spacing: 6) {
             Button {
+                guard isCollapsible else { return }
                 withAnimation(.easeInOut(duration: 0.2)) { vm.isHoursExpanded.toggle() }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "clock")
                         .foregroundStyle(AppColor.textSecondary)
                     Group {
-                        Text(place.isOpenNow ? "Open now" : "Closed")
-                            .foregroundStyle(place.isOpenNow ? AppColor.success : AppColor.danger)
-                            .fontWeight(.semibold)
-                        if let closes = place.closesAt {
-                            Text(" · Closes \(closes)").foregroundStyle(AppColor.textSecondary)
+                        switch place.businessStatus {
+                        case .closedTemporarily:
+                            Text("Temporarily closed")
+                                .foregroundStyle(AppColor.danger)
+                                .fontWeight(.semibold)
+                        case .closedPermanently:
+                            Text("Permanently closed")
+                                .foregroundStyle(AppColor.danger)
+                                .fontWeight(.semibold)
+                        default:
+                            if hasHours {
+                                Text(place.isOpenNow ? "Open now" : "Closed")
+                                    .foregroundStyle(place.isOpenNow ? AppColor.success : AppColor.danger)
+                                    .fontWeight(.semibold)
+                                if place.isOpenNow, let closes = place.closesAt {
+                                    Text(" · Closes \(closes)").foregroundStyle(AppColor.textSecondary)
+                                }
+                            } else {
+                                Text("No opening information available")
+                                    .foregroundStyle(AppColor.textSecondary)
+                            }
                         }
                     }
                     .font(.subheadline15)
                     Spacer()
-                    Image(systemName: vm.isHoursExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption12)
-                        .foregroundStyle(AppColor.textTertiary)
+                    if isCollapsible {
+                        Image(systemName: vm.isHoursExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption12)
+                            .foregroundStyle(AppColor.textTertiary)
+                    }
                 }
             }
             .buttonStyle(.plain)
+            .disabled(!isCollapsible)
 
-            if vm.isHoursExpanded {
+            if vm.isHoursExpanded && isCollapsible {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(place.openingHours.weekList.enumerated()), id: \.offset) { _, entry in
                         HStack {
@@ -327,71 +385,62 @@ struct POISheetView: View {
                         .foregroundStyle(BrandColor.sand)
                 }
             }
-            Label(place.address, systemImage: "mappin.circle")
+            Button(action: copyAddress) {
+                HStack(spacing: 6) {
+                    Image(systemName: "mappin.circle")
+                    Text(place.address)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 6)
+                    Image(systemName: didCopyAddress ? "checkmark" : "doc.on.doc")
+                        .foregroundStyle(didCopyAddress ? AppColor.success : AppColor.textTertiary)
+                }
                 .font(.caption12)
                 .foregroundStyle(AppColor.textSecondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(didCopyAddress ? "Address copied" : "Copy address")
+            .accessibilityValue(place.address)
+        }
+    }
+
+    private func focusMapOnPlace() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            router.poiDetent = .height(340)
+        }
+        router.requestPOIRecenter()
+        #if canImport(UIKit)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
+    }
+
+    private func copyName() {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = place.name
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
+
+    private func copyAddress() {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = place.address
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+            didCopyAddress = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            withAnimation(.easeInOut(duration: 0.2)) { didCopyAddress = false }
         }
     }
 
     private var reviewsBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Reviews")
-                    .font(.headline17)
-                    .foregroundStyle(AppColor.textPrimary)
-                Spacer()
-                Button {
-                    showMoreReviewsAlert = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                        Text("Add review")
-                    }
-                    .font(.caption11Bold)
-                    .foregroundStyle(place.mode.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(place.mode.tintColor)
-                    .clipShape(Capsule())
-                }
-            }
-
-            ForEach(place.reviews) { review in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Avatar(initials: String(review.authorName.prefix(1)), size: 28)
-                        Text(review.authorName)
-                            .font(.footnote13.weight(.semibold))
-                            .foregroundStyle(AppColor.textPrimary)
-                        Text("· \(review.daysAgo)d ago")
-                            .font(.caption12)
-                            .foregroundStyle(AppColor.textTertiary)
-                        Spacer()
-                        HStack(spacing: 1) {
-                            ForEach(0..<5, id: \.self) { idx in
-                                Image(systemName: idx < review.rating ? "star.fill" : "star")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(idx < review.rating ? AppColor.warning : AppColor.textTertiary)
-                            }
-                        }
-                    }
-                    Text(review.text)
-                        .font(.subheadline15)
-                        .foregroundStyle(AppColor.textSecondary)
-                        .lineSpacing(2)
-                }
-                .padding(.vertical, 6)
-                Divider().background(AppColor.dividerSoft)
-            }
-
-            Button {
-                showMoreReviewsAlert = true
-            } label: {
-                Text("See all reviews")
-                    .font(.subheadline15.weight(.medium))
-                    .foregroundStyle(BrandColor.sand)
-            }
-        }
+        POIReviewsBlock(
+            place: place,
+            onAddReview: { showMoreReviewsAlert = true },
+            onSeeAll: { showMoreReviewsAlert = true }
+        )
     }
 
     // MARK: - Action bar

@@ -46,7 +46,8 @@ enum AppConfig {
             "primaryType", "types",
             "regularOpeningHours", "currentOpeningHours", "websiteUri",
             "nationalPhoneNumber", "internationalPhoneNumber",
-            "reviews", "editorialSummary", "photos"
+            "reviews", "editorialSummary", "photos",
+            "businessStatus"
         ]
 
         static let searchTextFieldMask = placeFieldPaths

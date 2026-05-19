@@ -57,6 +57,7 @@ struct PlaceV1: Decodable {
     let editorialSummary: LocalizedText?
     let photos: [PhotoV1]?
     let addressComponents: [AddressComponentV1]?
+    let businessStatus: String?
 }
 
 struct AddressComponentV1: Decodable {

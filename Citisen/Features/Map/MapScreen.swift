@@ -79,6 +79,17 @@ struct MapScreen: View {
         .onChange(of: prefs.activeMode) { _, _ in
             viewModel?.applyCacheOrIdle()
         }
+        .onChange(of: router.recenterTrigger) { _, _ in
+            guard let id = router.poiSelectedId,
+                  let vm = viewModel,
+                  let place = vm.placesService.place(id: id) else { return }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                vm.cameraPosition = .region(MKCoordinateRegion(
+                    center: place.coordinate.clLocation,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                ))
+            }
+        }
         .onChange(of: router.poiSelectedId) { _, newValue in
             // Debounce so that rapid mid-swipe selection changes coalesce into a single
             // camera animation after the swipe settles — prevents first-swipe stutter.

@@ -19,6 +19,11 @@ struct OpeningHours: Codable, Hashable {
     var saturday: String?
     var sunday: String?
 
+    var hasAny: Bool {
+        monday != nil || tuesday != nil || wednesday != nil || thursday != nil
+            || friday != nil || saturday != nil || sunday != nil
+    }
+
     var weekList: [(day: String, hours: String)] {
         [
             ("Mon", monday ?? "Closed"),
@@ -38,6 +43,13 @@ struct Review: Codable, Hashable, Identifiable {
     let rating: Int
     let daysAgo: Int
     let text: String
+}
+
+enum BusinessStatus: String, Codable, Hashable {
+    case operational
+    case closedTemporarily
+    case closedPermanently
+    case unknown
 }
 
 struct Place: Identifiable, Hashable, Codable {
@@ -61,6 +73,7 @@ struct Place: Identifiable, Hashable, Codable {
     let website: URL?
     let phone: String?
     let photoNames: [String]?
+    let businessStatus: BusinessStatus
 
     init(
         id: UUID,
@@ -82,7 +95,8 @@ struct Place: Identifiable, Hashable, Codable {
         address: String,
         website: URL?,
         phone: String?,
-        photoNames: [String]? = nil
+        photoNames: [String]? = nil,
+        businessStatus: BusinessStatus = .unknown
     ) {
         self.id = id
         self.googlePlaceId = googlePlaceId
@@ -104,6 +118,7 @@ struct Place: Identifiable, Hashable, Codable {
         self.website = website
         self.phone = phone
         self.photoNames = photoNames
+        self.businessStatus = businessStatus
     }
 
     static func id(forGooglePlaceId googlePlaceId: String) -> UUID {

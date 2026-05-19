@@ -49,7 +49,8 @@ enum PlaceMapper {
             address: details.formattedAddress ?? "",
             website: details.websiteUri.flatMap { URL(string: $0) },
             phone: details.internationalPhoneNumber ?? details.nationalPhoneNumber,
-            photoNames: photoNames(from: details.photos)
+            photoNames: photoNames(from: details.photos),
+            businessStatus: businessStatus(details.businessStatus)
         )
     }
 
@@ -99,8 +100,18 @@ enum PlaceMapper {
             address: details.formattedAddress ?? "",
             website: details.websiteUri.flatMap { URL(string: $0) },
             phone: details.internationalPhoneNumber ?? details.nationalPhoneNumber,
-            photoNames: photoNames(from: details.photos)
+            photoNames: photoNames(from: details.photos),
+            businessStatus: businessStatus(details.businessStatus)
         )
+    }
+
+    private static func businessStatus(_ raw: String?) -> BusinessStatus {
+        switch raw {
+        case "OPERATIONAL":         return .operational
+        case "CLOSED_TEMPORARILY":  return .closedTemporarily
+        case "CLOSED_PERMANENTLY":  return .closedPermanently
+        default:                    return .unknown
+        }
     }
 
     static func priceLevelInt(_ value: String?) -> Int {

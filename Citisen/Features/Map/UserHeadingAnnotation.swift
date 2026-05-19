@@ -53,7 +53,7 @@ struct UserHeadingAnnotation: View {
         }
         .onAppear {
             updateBearing(rawBearing)
-            if let s = rawSpread { displayedSpread = s }
+            if let spread = rawSpread { displayedSpread = spread }
         }
         .accessibilityElement()
         .accessibilityLabel("Your location")

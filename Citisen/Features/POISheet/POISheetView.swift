@@ -348,20 +348,24 @@ struct POISheetView: View {
             .disabled(!isCollapsible)
 
             if vm.isHoursExpanded && isCollapsible {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(place.openingHours.weekList.enumerated()), id: \.offset) { _, entry in
-                        HStack {
-                            Text(entry.day).frame(width: 36, alignment: .leading)
-                                .foregroundStyle(AppColor.textSecondary)
-                            Text(entry.hours)
-                                .foregroundStyle(AppColor.textPrimary)
-                        }
-                        .font(.caption12)
-                    }
-                }
-                .padding(.leading, 22)
+                weeklyHoursDetail
             }
         }
+    }
+
+    private var weeklyHoursDetail: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(place.openingHours.weekList.enumerated()), id: \.offset) { _, entry in
+                HStack {
+                    Text(entry.day).frame(width: 36, alignment: .leading)
+                        .foregroundStyle(AppColor.textSecondary)
+                    Text(entry.hours)
+                        .foregroundStyle(AppColor.textPrimary)
+                }
+                .font(.caption12)
+            }
+        }
+        .padding(.leading, 22)
     }
 
     private var contactBlock: some View {

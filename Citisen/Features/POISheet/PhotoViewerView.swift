@@ -78,8 +78,7 @@ private struct ZoomablePhoto: View {
         }
     }
 
-    @ViewBuilder
-    private var imageContent: some View {
+    @ViewBuilder private var imageContent: some View {
         if let resolvedURL {
             AsyncImage(url: resolvedURL, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
                 switch phase {

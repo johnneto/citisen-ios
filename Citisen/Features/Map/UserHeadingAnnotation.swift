@@ -2,8 +2,8 @@ import CoreLocation
 import SwiftUI
 
 struct UserHeadingAnnotation: View {
-    let heading: CLHeading?
-    let mapHeading: Double
+    let locationService: LocationService
+    let tracker: MapHeadingTracker
 
     private let dotDiameter: CGFloat = 18
     private let coneRadius: CGFloat = 42
@@ -14,7 +14,15 @@ struct UserHeadingAnnotation: View {
     @State private var displayedSpread: Double = 70
 
     var body: some View {
-        ZStack {
+        // Reads of `tracker.heading` and `locationService.currentHeading` happen
+        // here — observation is scoped to this view, so the Map's pin ForEach
+        // does NOT re-evaluate when either value changes.
+        let heading = locationService.currentHeading
+        let mapHeading = tracker.heading
+        let rawBearing = Self.rawBearing(from: heading)
+        let rawSpread = Self.rawSpread(from: heading)
+
+        return ZStack {
             if let bearing = displayedBearing {
                 ConeShape(spreadDegrees: displayedSpread, radius: coneRadius)
                     .fill(
@@ -36,14 +44,19 @@ struct UserHeadingAnnotation: View {
             Circle()
                 .fill(.white)
                 .frame(width: dotDiameter + 4, height: dotDiameter + 4)
+                .overlay(
+                    Circle()
+                        .fill(Color(red: 0.0, green: 0.48, blue: 1.0))
+                        .frame(width: dotDiameter, height: dotDiameter)
+                )
                 .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
-
-            Circle()
-                .fill(Color(red: 0.0, green: 0.48, blue: 1.0))
-                .frame(width: dotDiameter, height: dotDiameter)
+                .compositingGroup()
         }
+        // Animate only the smoothed device-heading bearing and spread. The map
+        // heading already streams at frame rate from MapKit; chaining an
+        // ease-in-out on top of that produced visible stutter as easing curves
+        // re-targeted every frame.
         .animation(.easeInOut(duration: 0.45), value: displayedBearing)
-        .animation(.easeInOut(duration: 0.45), value: mapHeading)
         .animation(.easeInOut(duration: 0.35), value: displayedSpread)
         .onChange(of: rawBearing) { _, new in
             updateBearing(new)
@@ -59,13 +72,13 @@ struct UserHeadingAnnotation: View {
         .accessibilityLabel("Your location")
     }
 
-    private var rawBearing: Double? {
+    private static func rawBearing(from heading: CLHeading?) -> Double? {
         guard let heading else { return nil }
         let value = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
         return value >= 0 ? value : nil
     }
 
-    private var rawSpread: Double? {
+    private static func rawSpread(from heading: CLHeading?) -> Double? {
         guard let heading else { return nil }
         let accuracy = heading.headingAccuracy
         guard accuracy >= 0 else { return nil }

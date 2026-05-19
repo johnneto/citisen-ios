@@ -23,8 +23,10 @@ final class MapViewModel {
 
     private(set) var places: [Place] = []
     private(set) var phase: Phase = .idle
-    var visibleRegion: MKCoordinateRegion?
-    var mapHeading: Double = 0
+    // `@ObservationIgnored`: written on every map-camera frame during pan/tilt
+    // but only ever read on POI selection (for span). Observing it would re-evaluate
+    // the `Map` content closure 60×/sec and flicker the pin shadows.
+    @ObservationIgnored var visibleRegion: MKCoordinateRegion?
 
     let placesService: PlacesService
     let prefs: UserPreferencesService

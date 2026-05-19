@@ -18,6 +18,7 @@ struct MapScreen: View {
     @State private var viewModel: MapViewModel?
     @State private var poiCameraTask: Task<Void, Never>?
     @State private var welcomeCity: City?
+    @State private var headingTracker = MapHeadingTracker()
 
     var body: some View {
         ZStack {
@@ -123,8 +124,8 @@ struct MapScreen: View {
             if let userCoord = locationService.currentLocation {
                 Annotation("", coordinate: userCoord, anchor: .center) {
                     UserHeadingAnnotation(
-                        heading: locationService.currentHeading,
-                        mapHeading: vm.mapHeading
+                        locationService: locationService,
+                        tracker: headingTracker
                     )
                 }
                 .annotationTitles(.hidden)
@@ -145,8 +146,13 @@ struct MapScreen: View {
             }
         }
         .onMapCameraChange(frequency: .continuous) { context in
+            // Both writes intentionally avoid the @Observable graph of the Map
+            // content closure: `visibleRegion` is @ObservationIgnored, and the
+            // tracker is only read inside `UserHeadingAnnotation.body`. Without
+            // this isolation a 60 Hz camera stream re-diffed every pin and
+            // flickered their shadows on tilt/move.
             vm.visibleRegion = context.region
-            vm.mapHeading = context.camera.heading
+            headingTracker.update(context.camera.heading)
         }
         .mapControls {
             MapCompass()

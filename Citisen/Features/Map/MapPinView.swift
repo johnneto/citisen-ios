@@ -17,7 +17,6 @@ struct MapPinView: View {
                         Circle()
                             .strokeBorder(isSelected ? mode.color : Color.black.opacity(0.08), lineWidth: isSelected ? 2 : 0.5)
                     )
-                    .shadow(color: .black.opacity(0.22), radius: isSelected ? 8 : 4, x: 0, y: 3)
 
                 Image(systemName: mode.iconSymbol)
                     .font(.system(size: 14, weight: .semibold))
@@ -26,9 +25,15 @@ struct MapPinView: View {
             Triangle()
                 .fill(.white)
                 .frame(width: 10, height: 8)
-                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                 .offset(y: -2)
         }
+        // `compositingGroup()` flattens the head + tail into a single offscreen
+        // layer so the shadow below is computed once over the composed shape,
+        // not separately on each child. Without this, two overlapping shadows
+        // re-rasterized on every Map content-closure re-evaluation, producing
+        // the visible flicker on tilt/pan.
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.22), radius: isSelected ? 8 : 4, x: 0, y: 3)
         .scaleEffect(isSelected ? 1.1 : 1)
         .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
     }

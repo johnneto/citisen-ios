@@ -33,6 +33,8 @@
 		EFD539C92F8D901C00223CD3 /* Exceptions for "Citisen" folder in "Citisen" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Config/Secrets.example.xcconfig,
+				Config/Secrets.xcconfig,
 				Info.plist,
 			);
 			target = EFD5399D2F8D8D8100223CD3 /* Citisen */;
@@ -112,7 +114,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = EFD539BF2F8D8D8300223CD3 /* Build configuration list for PBXNativeTarget "Citisen" */;
 			buildPhases = (
-				EFDCC25D2F955E0A00159491 /* ShellScript */,
+				EFDCC25D2F955E0A00159491 /* Run Script */,
 				EFD5399A2F8D8D8100223CD3 /* Sources */,
 				EFD5399B2F8D8D8100223CD3 /* Frameworks */,
 				EFD5399C2F8D8D8100223CD3 /* Resources */,
@@ -185,7 +187,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2640;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					EFD5399D2F8D8D8100223CD3 = {
 						CreatedOnToolsVersion = 26.4;
@@ -205,7 +207,6 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
-				Base,
 			);
 			mainGroup = EFD539952F8D8D8100223CD3;
 			minimizedProjectReferenceProxies = 1;
@@ -246,7 +247,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		EFDCC25D2F955E0A00159491 /* ShellScript */ = {
+		EFDCC25D2F955E0A00159491 /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -256,13 +257,14 @@
 			);
 			inputPaths = (
 			);
+			name = "Run Script";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if which swiftlint > /dev/null; then\n  swiftlint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
+			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\nif which swiftlint > /dev/null; then\n  swiftlint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -306,6 +308,8 @@
 /* Begin XCBuildConfiguration section */
 		EFD539BD2F8D8D8300223CD3 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = EFD539A02F8D8D8100223CD3 /* Citisen */;
+			baseConfigurationReferenceRelativePath = Config/Secrets.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -363,6 +367,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -370,6 +375,8 @@
 		};
 		EFD539BE2F8D8D8300223CD3 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = EFD539A02F8D8D8100223CD3 /* Citisen */;
+			baseConfigurationReferenceRelativePath = Config/Secrets.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -420,6 +427,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -436,6 +444,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F8N4TVUKLF;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Citisen/Info.plist;
@@ -446,8 +455,8 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -482,6 +491,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F8N4TVUKLF;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Citisen/Info.plist;
@@ -492,8 +502,8 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

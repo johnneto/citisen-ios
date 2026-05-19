@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftData
 import SwiftUI
 
@@ -10,14 +11,32 @@ struct MainTabHostView: View {
     private var city
     @Environment(PlacesService.self)
     private var places
+    @Environment(LocationService.self)
+    private var locationService
+
+    @State private var mapVM: MapViewModel?
 
     var body: some View {
         @Bindable var router = router
+        @Bindable var prefs = prefs
 
         NavigationStack(path: $router.path) {
             ZStack {
-                MapScreen()
-                    .ignoresSafeArea()
+                if let mapVM {
+                    TabView(selection: $prefs.activeModeIndex) {
+                        ForEach(Array(prefs.tabBarOrder.enumerated()), id: \.offset) { index, mode in
+                            MapScreen(viewModel: mapVM)
+                                .tabItem {
+                                    Label(mode.displayName, systemImage: mode.iconSymbol)
+                                }
+                                .tag(index)
+                        }
+                    }
+                    .tint(prefs.activeMode.color)
+                    .animation(nil, value: prefs.activeModeIndex)
+                } else {
+                    Color.clear
+                }
 
                 if let toast = router.nearMeToast {
                     toastView(toast)
@@ -40,10 +59,32 @@ struct MainTabHostView: View {
                     .zIndex(100)
             }
             .background(AppColor.surfacePrimary.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self, destination: destination(for:))
         }
+        .task { await bootstrapMapIfNeeded() }
         .sheet(item: $router.presentedSheet, onDismiss: { router.dismissSheet() }) { sheet in
             sheetContent(sheet)
+        }
+    }
+
+    private func bootstrapMapIfNeeded() async {
+        guard mapVM == nil else { return }
+        let vm = MapViewModel(
+            places: places,
+            prefs: prefs,
+            cityService: city,
+            locationService: locationService
+        )
+        mapVM = vm
+        if locationService.authorizationStatus == .notDetermined {
+            locationService.requestWhenInUse()
+        }
+        locationService.startUpdating()
+        if locationService.currentLocation != nil {
+            vm.centerOnUserIfAvailable()
+        } else {
+            vm.loadInitial()
         }
     }
 

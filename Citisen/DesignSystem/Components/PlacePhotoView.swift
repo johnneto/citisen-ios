@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
-/// Loads a Places API (New) photo by resource name. Falls back to a mode-tinted
-/// gradient placeholder while loading or on failure.
+/// Loads a Places API (New) photo by resource name through `PlacePhotoCache`
+/// (memory + 3-day disk). Falls back to a mode-tinted gradient placeholder
+/// while loading or on failure.
 struct PlacePhotoView: View {
     let photoName: String
     let mode: TravelMode
@@ -11,30 +13,15 @@ struct PlacePhotoView: View {
     var maxWidthPx: Int = AppConfig.Spots.photoMaxWidthPx
     var maxHeightPx: Int = AppConfig.Spots.photoMaxHeightPx
 
-    private static let client = GooglePlacesClient()
-
-    @State private var resolvedURL: URL?
-
     var body: some View {
-        Group {
-            if let resolvedURL {
-                AsyncImage(url: resolvedURL, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
-                    switch phase {
-                    case .empty:
-                        placeholder
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholder
-                    @unknown default:
-                        placeholder
-                    }
-                }
-            } else {
-                placeholder
-            }
+        CachedPlacePhoto(
+            photoName: photoName,
+            maxWidthPx: maxWidthPx,
+            maxHeightPx: maxHeightPx,
+            contentMode: .fill,
+            transitionDuration: 0.2
+        ) {
+            placeholder
         }
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -42,16 +29,46 @@ struct PlacePhotoView: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(AppColor.dividerSoft, lineWidth: 0.5)
         )
-        .task(id: photoName) {
-            resolvedURL = Self.client.photoMediaURL(
-                name: photoName,
-                maxWidthPx: maxWidthPx,
-                maxHeightPx: maxHeightPx
-            )
-        }
     }
 
     private var placeholder: some View {
         PlaceholderPhoto(seed: seed, mode: mode, height: height, cornerRadius: cornerRadius)
+    }
+}
+
+/// Shared SwiftUI wrapper around `PlacePhotoCache`. Shows the supplied
+/// placeholder while loading; swaps in the resolved `UIImage` on success.
+struct CachedPlacePhoto<Placeholder: View>: View {
+    let photoName: String
+    var maxWidthPx: Int = AppConfig.Spots.photoMaxWidthPx
+    var maxHeightPx: Int = AppConfig.Spots.photoMaxHeightPx
+    var contentMode: ContentMode = .fill
+    var transitionDuration: Double = 0.2
+    @ViewBuilder let placeholder: () -> Placeholder
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: contentMode)
+                    .transition(.opacity)
+            } else {
+                placeholder()
+            }
+        }
+        .animation(.easeInOut(duration: transitionDuration), value: image)
+        .task(id: photoName) {
+            let result = await PlacePhotoCache.shared.image(
+                for: photoName,
+                maxWidthPx: maxWidthPx,
+                maxHeightPx: maxHeightPx
+            )
+            if !Task.isCancelled {
+                image = result
+            }
+        }
     }
 }

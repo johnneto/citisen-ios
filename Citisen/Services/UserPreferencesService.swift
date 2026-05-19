@@ -18,6 +18,7 @@ final class UserPreferencesService {
         static let lastDynamicCity = "citisen.lastDynamicCity"
         static let recentCities = "citisen.recentCities"
         static let spotsCacheMigratedV2 = "citisen.spotsCacheMigratedV2"
+        static let spotsListCacheClearedForPhotos10 = "citisen.spotsListCacheClearedForPhotos10"
     }
 
     static let maxRecentCities = 10
@@ -114,6 +115,13 @@ final class UserPreferencesService {
         didSet { defaults.set(spotsCacheMigratedV2, forKey: Keys.spotsCacheMigratedV2) }
     }
 
+    /// One-shot flag: clears the on-disk `Spots/list_*.json` cache once after the
+    /// `maxPhotosPerPlace` bump from 6 → 10 so users pick up richer photo sets
+    /// without waiting 30 days for the natural TTL to expire.
+    var spotsListCacheClearedForPhotos10: Bool {
+        didSet { defaults.set(spotsListCacheClearedForPhotos10, forKey: Keys.spotsListCacheClearedForPhotos10) }
+    }
+
     var user: UserProfile = .placeholder
 
     private let defaults: UserDefaults
@@ -128,6 +136,7 @@ final class UserPreferencesService {
         self.locationRequested = defaults.bool(forKey: Keys.locationRequested)
         self.lastSessionCityId = defaults.string(forKey: Keys.lastSessionCityId)
         self.spotsCacheMigratedV2 = defaults.bool(forKey: Keys.spotsCacheMigratedV2)
+        self.spotsListCacheClearedForPhotos10 = defaults.bool(forKey: Keys.spotsListCacheClearedForPhotos10)
 
         if let data = defaults.data(forKey: Keys.lastDynamicCity),
            let decoded = try? JSONDecoder().decode(City.self, from: data) {

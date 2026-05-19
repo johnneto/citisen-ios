@@ -8,12 +8,18 @@ struct PhotoViewerView: View {
     @Environment(\.dismiss)
     private var dismiss
     @State private var index: Int
+    @State private var visibleCount: Int
 
     init(photoNames: [String], initialIndex: Int, mode: TravelMode) {
+        let clampedIndex = max(0, min(initialIndex, max(0, photoNames.count - 1)))
         self.photoNames = photoNames
-        self.initialIndex = max(0, min(initialIndex, max(0, photoNames.count - 1)))
+        self.initialIndex = clampedIndex
         self.mode = mode
-        _index = State(initialValue: max(0, min(initialIndex, max(0, photoNames.count - 1))))
+        _index = State(initialValue: clampedIndex)
+
+        let batch = AppConfig.Spots.initialPhotoBatchSize
+        let target = max(batch, clampedIndex + 1)
+        _visibleCount = State(initialValue: min(photoNames.count, target))
     }
 
     var body: some View {
@@ -21,13 +27,19 @@ struct PhotoViewerView: View {
             Color.black.ignoresSafeArea()
 
             TabView(selection: $index) {
-                ForEach(Array(photoNames.enumerated()), id: \.offset) { idx, name in
+                ForEach(Array(photoNames.prefix(visibleCount).enumerated()), id: \.offset) { idx, name in
                     ZoomablePhoto(name: name, mode: mode)
                         .tag(idx)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: photoNames.count > 1 ? .automatic : .never))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .onChange(of: index) { _, newIndex in
+                if newIndex >= visibleCount - 1 {
+                    let next = visibleCount + AppConfig.Spots.photoBatchIncrement
+                    visibleCount = min(next, photoNames.count)
+                }
+            }
 
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
@@ -48,9 +60,6 @@ private struct ZoomablePhoto: View {
     let name: String
     let mode: TravelMode
 
-    private static let client = GooglePlacesClient()
-
-    @State private var resolvedURL: URL?
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -73,30 +82,14 @@ private struct ZoomablePhoto: View {
             .gesture(magnify)
             .onTapGesture(count: 2) { resetOrZoom() }
         }
-        .task(id: name) {
-            resolvedURL = Self.client.photoMediaURL(name: name)
-        }
     }
 
     @ViewBuilder private var imageContent: some View {
-        if let resolvedURL {
-            AsyncImage(url: resolvedURL, transaction: Transaction(animation: .easeInOut(duration: 0.2))) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFit()
-                case .failure:
-                    Image(systemName: "photo")
-                        .font(.system(size: 48, weight: .light))
-                        .foregroundStyle(.white.opacity(0.4))
-                case .empty:
-                    ProgressView().tint(.white)
-                @unknown default:
-                    Color.black
-                }
-            }
-        } else {
+        CachedPlacePhoto(
+            photoName: name,
+            contentMode: .fit,
+            transitionDuration: 0.2
+        ) {
             ProgressView().tint(.white)
         }
     }

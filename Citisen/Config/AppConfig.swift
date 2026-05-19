@@ -16,9 +16,15 @@ enum AppConfig {
         static let minSpotsPerRequest = 20
         static let maxSpotsPerRequest = 60
         static let placesConcurrency = 8
-        static let maxPhotosPerPlace = 6
+        static let maxPhotosPerPlace = 10
         static let photoMaxWidthPx = 1_200
         static let photoMaxHeightPx = 800
+        static let initialPhotoBatchSize = 5
+        static let photoBatchIncrement = 5
+        static let photoCacheTTLDays: Double = 3
+        static var photoCacheTTLSeconds: TimeInterval { photoCacheTTLDays * 86_400 }
+        static let photoCacheDiskCapBytes = 75 * 1_024 * 1_024
+        static let photoCacheMemoryCapBytes = 30 * 1_024 * 1_024
     }
 
     enum CitySearch {

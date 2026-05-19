@@ -29,6 +29,7 @@ struct POISheetView: View {
     @State private var showVoiceAlert = false
     @State private var didCopyAddress = false
     @State private var viewerPhotoIndex: Int?
+    @State private var visibleCarouselCount: Int = AppConfig.Spots.initialPhotoBatchSize
 
     init(place: Place) {
         self.place = place
@@ -65,6 +66,9 @@ struct POISheetView: View {
                     }
                 )
             }
+        }
+        .onChange(of: place.id) { _, _ in
+            visibleCarouselCount = AppConfig.Spots.initialPhotoBatchSize
         }
     }
 
@@ -255,9 +259,10 @@ struct POISheetView: View {
         let placeholderWidth: CGFloat = compact ? 120 : 200
 
         return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            LazyHStack(spacing: 8) {
                 if let photoNames = place.photoNames, !photoNames.isEmpty {
-                    ForEach(Array(photoNames.enumerated()), id: \.offset) { index, name in
+                    let renderCount = min(visibleCarouselCount, photoNames.count)
+                    ForEach(Array(photoNames.prefix(renderCount).enumerated()), id: \.offset) { index, name in
                         Button {
                             viewerPhotoIndex = index
                         } label: {
@@ -272,6 +277,14 @@ struct POISheetView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open photo \(index + 1) of \(photoNames.count)")
+                    }
+                    if renderCount < photoNames.count {
+                        Color.clear
+                            .frame(width: 1, height: photoHeight)
+                            .onAppear {
+                                let next = visibleCarouselCount + AppConfig.Spots.photoBatchIncrement
+                                visibleCarouselCount = min(next, photoNames.count)
+                            }
                     }
                 } else {
                     ForEach(0..<3, id: \.self) { index in

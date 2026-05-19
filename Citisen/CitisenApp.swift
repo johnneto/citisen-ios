@@ -23,6 +23,10 @@ struct CitisenApp: App {
         MainActor.assumeIsolated {
             CacheMigrator.runIfNeeded(prefs: prefs)
         }
+        PlacePhotoCache.purgeExpired(
+            ttl: AppConfig.Spots.photoCacheTTLSeconds,
+            diskCapBytes: AppConfig.Spots.photoCacheDiskCapBytes
+        )
         _prefs = State(initialValue: prefs)
         _cityService = State(initialValue: CityService(prefs: prefs))
     }

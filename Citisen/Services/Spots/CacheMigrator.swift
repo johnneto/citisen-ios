@@ -9,6 +9,7 @@ import Foundation
 @MainActor
 enum CacheMigrator {
     static func runIfNeeded(prefs: UserPreferencesService) {
+        runListCachePhotoBump(prefs: prefs)
         guard !prefs.spotsCacheMigratedV2 else { return }
         defer { prefs.spotsCacheMigratedV2 = true }
 
@@ -76,6 +77,25 @@ enum CacheMigrator {
                 existing = Array(existing.prefix(UserPreferencesService.maxRecentCities))
             }
             prefs.recentCities = existing
+        }
+    }
+
+    /// One-shot wipe of cached spot lists so users pick up the bumped 10-photo
+    /// cap immediately instead of waiting out the 30-day TTL on pre-bump lists.
+    /// Individual `place_<uuid>.json` files are left alone — they re-resolve
+    /// cheaply and don't influence carousel pagination.
+    private static func runListCachePhotoBump(prefs: UserPreferencesService) {
+        guard !prefs.spotsListCacheClearedForPhotos10 else { return }
+        defer { prefs.spotsListCacheClearedForPhotos10 = true }
+
+        let directory = spotsDirectory()
+        let fileManager = FileManager.default
+        let contents = (try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for url in contents where url.lastPathComponent.hasPrefix("list_") {
+            try? fileManager.removeItem(at: url)
         }
     }
 

@@ -38,9 +38,9 @@ private struct SparkleIndicator: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
+            let now = context.date.timeIntervalSinceReferenceDate
             // Slow breathing pulse: ~1.5s period.
-            let pulse = (sin(t * 2.0 * .pi / 1.5) + 1) / 2
+            let pulse = (sin(now * 2.0 * .pi / 1.5) + 1) / 2
             let auraScale = 0.85 + pulse * 0.35
             let auraOpacity = 0.25 + pulse * 0.45
             let iconScale = 0.94 + pulse * 0.10
@@ -81,9 +81,9 @@ private struct ShimmerLabel: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
+            let now = context.date.timeIntervalSinceReferenceDate
             // Highlight position sweeps 0..1 over ~1.8s.
-            let phase = (t.truncatingRemainder(dividingBy: 1.8)) / 1.8
+            let phase = (now.truncatingRemainder(dividingBy: 1.8)) / 1.8
             let center = CGFloat(phase) * 1.4 - 0.2 // overshoot for clean entry/exit
 
             Text(text)

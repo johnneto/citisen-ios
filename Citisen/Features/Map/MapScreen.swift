@@ -15,23 +15,20 @@ struct MapScreen: View {
     @Environment(\.openURL)
     private var openURL
 
-    @State private var viewModel: MapViewModel?
+    let viewModel: MapViewModel
+
     @State private var poiCameraTask: Task<Void, Never>?
     @State private var welcomeCity: City?
     @State private var headingTracker = MapHeadingTracker()
 
     var body: some View {
         ZStack {
-            if let viewModel {
-                mapContent(viewModel)
-                overlay(viewModel)
-                if case .loading = viewModel.phase {
-                    MapLoadingOverlay(mode: prefs.activeMode)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
-                }
-            } else {
-                Color.clear
+            mapContent(viewModel)
+            overlay(viewModel)
+            if case .loading = viewModel.phase {
+                MapLoadingOverlay(mode: prefs.activeMode)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
             }
 
             if let welcomeCity {
@@ -45,47 +42,26 @@ struct MapScreen: View {
         // MapKit Metal layer reattaches on NavigationStack pop — otherwise
         // they momentarily render against the black window background.
         .background(AppColor.surfacePrimary.ignoresSafeArea())
-        .animation(.easeInOut(duration: 0.2), value: viewModel?.phase)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.phase)
         .animation(.easeInOut(duration: 0.25), value: welcomeCity?.id)
         .onDisappear {
             poiCameraTask?.cancel()
             poiCameraTask = nil
         }
-        .onAppear {
-            if viewModel == nil {
-                let vm = MapViewModel(
-                    places: places,
-                    prefs: prefs,
-                    cityService: cityService,
-                    locationService: locationService
-                )
-                viewModel = vm
-                if locationService.authorizationStatus == .notDetermined {
-                    locationService.requestWhenInUse()
-                }
-                locationService.startUpdating()
-                if locationService.currentLocation != nil {
-                    vm.centerOnUserIfAvailable()
-                } else {
-                    vm.loadInitial()
-                }
-            }
-        }
         .onChange(of: locationService.currentLocation?.latitude) { _, _ in
-            viewModel?.centerOnUserIfAvailable()
+            viewModel.centerOnUserIfAvailable()
         }
         .onChange(of: cityService.citySelectionEpoch) { _, _ in
             handleCityChange()
         }
         .onChange(of: prefs.activeMode) { _, _ in
-            viewModel?.applyCacheOrIdle()
+            viewModel.applyCacheOrIdle()
         }
         .onChange(of: router.recenterTrigger) { _, _ in
             guard let id = router.poiSelectedId,
-                  let vm = viewModel,
-                  let place = vm.placesService.place(id: id) else { return }
+                  let place = viewModel.placesService.place(id: id) else { return }
             withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                vm.cameraPosition = .region(MKCoordinateRegion(
+                viewModel.cameraPosition = .region(MKCoordinateRegion(
                     center: place.coordinate.clLocation,
                     span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
                 ))
@@ -95,7 +71,7 @@ struct MapScreen: View {
             // Debounce so that rapid mid-swipe selection changes coalesce into a single
             // camera animation after the swipe settles — prevents first-swipe stutter.
             poiCameraTask?.cancel()
-            guard let newValue, let vm = viewModel else { return }
+            guard let newValue else { return }
             // Skip when MapScreen isn't the visible top of navigation or the POI
             // sheet isn't presenting — avoids offscreen camera work during a
             // back-pop from Saved while `poiSelectedId` is still set.
@@ -105,11 +81,11 @@ struct MapScreen: View {
                 if Task.isCancelled { return }
                 guard router.presentedSheet == .poi,
                       router.poiSelectedId == newValue else { return }
-                guard let place = vm.placesService.place(id: newValue) else { return }
+                guard let place = viewModel.placesService.place(id: newValue) else { return }
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                    vm.cameraPosition = .region(MKCoordinateRegion(
+                    viewModel.cameraPosition = .region(MKCoordinateRegion(
                         center: place.coordinate.clLocation,
-                        span: vm.visibleRegion?.span ?? MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                        span: viewModel.visibleRegion?.span ?? MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
                     ))
                 }
             }
@@ -158,6 +134,7 @@ struct MapScreen: View {
             MapCompass()
             MapPitchToggle()
         }
+        .ignoresSafeArea()
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: prefs.activeMode)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: vm.activeSubFilters)
         .animation(.easeInOut(duration: 0.2), value: vm.phase)
@@ -192,7 +169,7 @@ struct MapScreen: View {
 
             SubFilterBar(mode: prefs.activeMode, active: $vm.activeSubFilters)
         }
-        .padding(.top, 54) // below safe area
+        .padding(.top, 8)
     }
 
     private func bottomSection(_ vm: MapViewModel) -> some View {
@@ -213,10 +190,7 @@ struct MapScreen: View {
                 }
                 .padding(.trailing, Spacing.md)
             }
-
-            LiquidGlassTabBar()
-                .padding(.horizontal, 12)
-                .padding(.bottom, 22)
+            .padding(.bottom, 24)
         }
         .alert(
             "Location access needed",
@@ -261,10 +235,9 @@ struct MapScreen: View {
     }
 
     private func handleCityChange() {
-        guard let vm = viewModel else { return }
         let newCity = cityService.activeCity
         let shouldWelcome = newCity.id != prefs.lastSessionCityId
-        vm.handleCityChange()
+        viewModel.handleCityChange()
         if shouldWelcome {
             showWelcome(for: newCity)
             prefs.lastSessionCityId = newCity.id
@@ -319,12 +292,20 @@ private struct LoadSuggestionsCard: View {
                     .foregroundStyle(AppColor.textSecondary)
             }
             Spacer(minLength: 6)
-            Button("Load", action: onLoad)
-                .font(.footnote13.weight(.semibold))
-                .tint(BrandColor.sand)
+            Button(action: onLoad) {
+                Text("Load")
+                    .font(.footnote13.weight(.semibold))
+                    .foregroundStyle(BrandColor.sand)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Load suggestions")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.leading, 14)
+        .padding(.trailing, 4)
+        .padding(.vertical, 6)
         .liquidGlass(corner: 16, strength: .regular, interactive: true)
     }
 }

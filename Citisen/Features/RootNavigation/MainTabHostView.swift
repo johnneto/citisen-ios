@@ -17,7 +17,6 @@ struct MainTabHostView: View {
         NavigationStack(path: $router.path) {
             ZStack {
                 MapScreen()
-                    .ignoresSafeArea()
 
                 if let toast = router.nearMeToast {
                     toastView(toast)

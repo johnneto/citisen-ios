@@ -24,6 +24,7 @@ struct MapScreen: View {
         ZStack {
             if let viewModel {
                 mapContent(viewModel)
+                    .ignoresSafeArea()
                 overlay(viewModel)
                 if case .loading = viewModel.phase {
                     MapLoadingOverlay(mode: prefs.activeMode)
@@ -45,6 +46,7 @@ struct MapScreen: View {
         // MapKit Metal layer reattaches on NavigationStack pop — otherwise
         // they momentarily render against the black window background.
         .background(AppColor.surfacePrimary.ignoresSafeArea())
+        .travelModeToolbar()
         .animation(.easeInOut(duration: 0.2), value: viewModel?.phase)
         .animation(.easeInOut(duration: 0.25), value: welcomeCity?.id)
         .onDisappear {
@@ -176,6 +178,9 @@ struct MapScreen: View {
             Spacer()
             bottomSection(vm)
         }
+        // The bottom edge respects the safe area so the FAB / banners clear the
+        // bottom-bar toolbar; the top keeps its manual inset (see topSection).
+        .ignoresSafeArea(.container, edges: .top)
     }
 
     private func topSection(_ vm: MapViewModel) -> some View {
@@ -202,7 +207,7 @@ struct MapScreen: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             phaseBanner(vm)
-                .animation(.easeInOut(duration: 0.25), value: vm.phase)
+                .animation(.easeInOut(duration: 0.2), value: vm.phase)
             HStack {
                 Spacer()
                 NearMeFAB {
@@ -213,11 +218,8 @@ struct MapScreen: View {
                 }
                 .padding(.trailing, Spacing.md)
             }
-
-            LiquidGlassTabBar()
-                .padding(.horizontal, 12)
-                .padding(.bottom, 22)
         }
+        .padding(.bottom, Spacing.sm)
         .alert(
             "Location access needed",
             isPresented: Binding(
@@ -291,10 +293,7 @@ private struct NearMeFAB: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(BrandColor.sand)
                 .frame(width: 52, height: 52)
-                .background(AppColor.surfaceElevated)
-                .clipShape(Circle())
-                .overlay(Circle().strokeBorder(AppColor.divider, lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+                .liquidGlass(corner: 26, strength: .regular, interactive: true)
         }
         .buttonStyle(.pressableScale)
         .accessibilityLabel("Center on my location")

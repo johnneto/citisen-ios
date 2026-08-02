@@ -146,7 +146,11 @@ final class RemotePlacesBackend: PlacesBackend {
             return nil
         }
         do {
-            guard let details = try await places.placeDetails(id: googlePlaceId),
+            guard let details = try await places.placeDetails(
+                      id: googlePlaceId,
+                      languageCode: PlaceLocale.languageCode(forCityId: place.cityId),
+                      regionCode: PlaceLocale.countryCode(fromCityId: place.cityId)
+                  ),
                   let fresh = PlaceMapper.makePlace(from: details, cityId: place.cityId, mode: place.mode) else {
                 return nil
             }
@@ -166,7 +170,8 @@ final class RemotePlacesBackend: PlacesBackend {
     func cachedSpots(city: City, mode: TravelMode) -> [Place]? {
         let key = cacheKey(cityId: city.id, mode: mode)
         guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
-        return cached.places
+        // Lists cached before dedupe landed can still hold repeats.
+        return cached.places.uniquedById()
     }
 
     func keptSpots(cityId: String, mode: TravelMode) -> [Place] {
@@ -202,7 +207,7 @@ private extension RemotePlacesBackend {
            let cached = cache.loadEntry(key: key),
            !cached.places.isEmpty {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public) (stream)")
-            for place in cached.places {
+            for place in cached.places.uniquedById() {
                 continuation.yield(place)
             }
             return
@@ -221,7 +226,11 @@ private extension RemotePlacesBackend {
             throw SpotsError.aiUnavailable("Gemini returned no spots.")
         }
 
+        // Distinct curated names can resolve to the same Google place (aliases,
+        // a venue and its bar). `Place.id` is a v5 UUID over `googlePlaceId`, so
+        // keeping both would stack map pins and collide on every ForEach id.
         var resolved: [Place] = []
+        var seenIds = Set<UUID>()
         try await withThrowingTaskGroup(of: Place?.self) { group in
             let concurrency = AppConfig.Spots.placesConcurrency
             var iterator = curated.makeIterator()
@@ -239,7 +248,7 @@ private extension RemotePlacesBackend {
             while inFlight > 0 {
                 try Task.checkCancellation()
                 if let place = try await group.next() {
-                    if let place {
+                    if let place, seenIds.insert(place.id).inserted {
                         resolved.append(place)
                         cache.savePlace(place)
                         continuation.yield(place)
@@ -270,6 +279,7 @@ private extension RemotePlacesBackend {
     ) async throws -> [Place] {
         let concurrency = AppConfig.Spots.placesConcurrency
         var resolved: [Place] = []
+        var seenIds = Set<UUID>()
 
         try await withThrowingTaskGroup(of: Place?.self) { group in
             var iterator = curated.makeIterator()
@@ -287,7 +297,7 @@ private extension RemotePlacesBackend {
             while inFlight > 0 {
                 try Task.checkCancellation()
                 if let place = try await group.next() {
-                    if let place {
+                    if let place, seenIds.insert(place.id).inserted {
                         resolved.append(place)
                         cache.savePlace(place)
                     }
@@ -322,12 +332,18 @@ private extension RemotePlacesBackend {
             cityCenter: viewport.center,
             cityRadiusMeters: biasRadius
         )
+        // Gemini is asked for local-language official names, so resolve in the same
+        // language: it keeps name matching meaningful and stops Google handing back
+        // a listing's name in an unrelated language.
+        let languageCode = PlaceLocale.languageCode(for: city)
         do {
             var candidates = try await places.searchTextCandidates(
                 query: query,
                 near: viewport.center,
                 radius: biasRadius,
-                includedType: normalizedHint
+                includedType: normalizedHint,
+                languageCode: languageCode,
+                regionCode: city.countryCode
             )
             var choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             // If the type-filtered search produced nothing usable, the Gemini hint
@@ -337,7 +353,9 @@ private extension RemotePlacesBackend {
                 candidates = try await places.searchTextCandidates(
                     query: query,
                     near: viewport.center,
-                    radius: biasRadius
+                    radius: biasRadius,
+                    languageCode: languageCode,
+                    regionCode: city.countryCode
                 )
                 choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             }
@@ -419,7 +437,12 @@ extension RemotePlacesBackend {
         mode: TravelMode,
         source: PlaceSource
     ) async throws -> Place? {
-        guard let details = try await places.placeDetails(id: googlePlaceId, sessionToken: sessionToken),
+        guard let details = try await places.placeDetails(
+                  id: googlePlaceId,
+                  sessionToken: sessionToken,
+                  languageCode: PlaceLocale.languageCode(forCityId: cityId),
+                  regionCode: PlaceLocale.countryCode(fromCityId: cityId)
+              ),
               let place = PlaceMapper.makePlace(
                   from: details,
                   cityId: cityId,

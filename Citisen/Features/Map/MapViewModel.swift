@@ -77,12 +77,12 @@ final class MapViewModel {
     /// Curated order is preserved (it carries the Gemini ranking); kept places
     /// are appended alphabetically so their pins don't reshuffle between runs.
     private func rebuildPlaces() {
-        let curatedIds = Set(curatedPlaces.map(\.id))
         let kept = placesService
             .keptSpots(cityId: cityService.activeCity.id, mode: prefs.activeMode)
-            .filter { !curatedIds.contains($0.id) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        places = curatedPlaces + kept
+        // Curated first, so a spot the AI also suggested keeps its ranked slot
+        // and its curated rationale rather than the kept copy.
+        places = (curatedPlaces + kept).uniquedById()
     }
 
     /// Called when the user keeps a searched place, so its pin becomes permanent

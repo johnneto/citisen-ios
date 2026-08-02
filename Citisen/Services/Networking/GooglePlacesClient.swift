@@ -14,12 +14,18 @@ final class GooglePlacesClient {
     /// Text Search (New). Returns up to `maxResults` candidates in Google's
     /// ranking order so the caller can pick the official listing among dupes.
     /// Billing is per request, not per result, so asking for 5 costs the same as 1.
+    ///
+    /// `languageCode` decides which of a listing's names `displayName` carries;
+    /// without it Google can hand back a name in an unrelated language (see
+    /// `PlaceLocale`).
     func searchTextCandidates(
         query: String,
         near center: CLLocationCoordinate2D,
         radius: Double = 5_000,
         includedType: String? = nil,
-        maxResults: Int = 5
+        maxResults: Int = 5,
+        languageCode: String? = nil,
+        regionCode: String? = nil
     ) async throws -> [PlaceV1] {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
@@ -37,7 +43,9 @@ final class GooglePlacesClient {
             ),
             maxResultCount: maxResults,
             includedType: includedType,
-            strictTypeFiltering: includedType == nil ? nil : true
+            strictTypeFiltering: includedType == nil ? nil : true,
+            languageCode: languageCode,
+            regionCode: regionCode
         )
 
         var request = URLRequest(url: url)
@@ -53,15 +61,27 @@ final class GooglePlacesClient {
     }
 
     /// Fetches full place details. Pass the `sessionToken` from a preceding
-    /// autocomplete run so Google bills both calls as one session.
-    func placeDetails(id placeId: String, sessionToken: String? = nil) async throws -> PlaceV1? {
+    /// autocomplete run so Google bills both calls as one session, and the same
+    /// `languageCode` used to resolve the place so its name does not switch
+    /// language between the card and the detail sheet.
+    func placeDetails(
+        id placeId: String,
+        sessionToken: String? = nil,
+        languageCode: String? = nil,
+        regionCode: String? = nil
+    ) async throws -> PlaceV1? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
         guard var components = URLComponents(string: "\(AppConfig.Endpoints.placesDetailsBase)/\(placeId)") else {
             throw SpotsError.placesUnauthorized(detail: nil)
         }
-        if let sessionToken {
-            components.queryItems = [URLQueryItem(name: "sessionToken", value: sessionToken)]
+        let queryItems = [
+            sessionToken.map { URLQueryItem(name: "sessionToken", value: $0) },
+            languageCode.map { URLQueryItem(name: "languageCode", value: $0) },
+            regionCode.map { URLQueryItem(name: "regionCode", value: $0) }
+        ].compactMap { $0 }
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
         }
         guard let url = components.url else {
             throw SpotsError.placesUnauthorized(detail: nil)

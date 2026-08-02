@@ -71,8 +71,25 @@ struct AddressComponentV1: Decodable {
 struct AutocompleteRequest: Encodable {
     let input: String
     let sessionToken: String
+    let locationBias: SearchTextRequest.LocationBias?
     let includedPrimaryTypes: [String]?
     let languageCode: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case input, sessionToken, locationBias, includedPrimaryTypes, languageCode
+    }
+
+    // Hand-written so nil fields are omitted rather than sent as `null` — the
+    // synthesized encoder emits explicit nulls, and Places rejects a null
+    // `locationBias`. Mirrors `SearchTextRequest.encode(to:)`.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(input, forKey: .input)
+        try container.encode(sessionToken, forKey: .sessionToken)
+        try container.encodeIfPresent(locationBias, forKey: .locationBias)
+        try container.encodeIfPresent(includedPrimaryTypes, forKey: .includedPrimaryTypes)
+        try container.encodeIfPresent(languageCode, forKey: .languageCode)
+    }
 }
 
 struct AutocompleteResponse: Decodable {

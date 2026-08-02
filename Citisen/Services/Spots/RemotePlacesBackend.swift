@@ -96,10 +96,6 @@ final class RemotePlacesBackend: PlacesBackend {
         }
     }
 
-    func search(query: String, city: City) async -> [Place] {
-        await mockFallback.search(query: query, city: city)
-    }
-
     func resolvePlace(id: UUID) async -> Place? {
         if let cached = cache.loadPlace(id: id) { return cached }
         return await mockFallback.resolvePlace(id: id)
@@ -115,17 +111,14 @@ final class RemotePlacesBackend: PlacesBackend {
 
         if let gpid = googlePlaceId, let cityId, let mode {
             do {
-                guard let details = try await places.placeDetails(id: gpid) else {
-                    return .notFound
-                }
-                guard let place = PlaceMapper.makePlace(
-                    from: details,
+                guard let place = try await fetchAndCache(
+                    googlePlaceId: gpid,
+                    sessionToken: nil,
                     cityId: cityId,
                     mode: mode
                 ) else {
                     return .notFound
                 }
-                cache.savePlace(place)
                 return .found(place)
             } catch let spotsError as SpotsError {
                 switch spotsError {
@@ -332,5 +325,46 @@ final class RemotePlacesBackend: PlacesBackend {
             latitudeDelta: delta,
             longitudeDelta: delta
         )
+    }
+}
+
+// MARK: - Search resolution
+
+extension RemotePlacesBackend {
+    func resolveSearchResult(
+        placeId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async -> Place? {
+        if let cached = cache.loadPlace(id: Place.id(forGooglePlaceId: placeId)) { return cached }
+        do {
+            return try await fetchAndCache(
+                googlePlaceId: placeId,
+                sessionToken: sessionToken,
+                cityId: cityId,
+                mode: mode
+            )
+        } catch {
+            AppLog.places.error("resolveSearchResult failed for \(placeId, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Fetches details for a Google place id, maps it with the caller's `cityId`
+    /// and `mode`, and writes it to the on-disk place cache. `sessionToken` binds
+    /// the call to a preceding autocomplete session for billing.
+    fileprivate func fetchAndCache(
+        googlePlaceId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async throws -> Place? {
+        guard let details = try await places.placeDetails(id: googlePlaceId, sessionToken: sessionToken),
+              let place = PlaceMapper.makePlace(from: details, cityId: cityId, mode: mode) else {
+            return nil
+        }
+        cache.savePlace(place)
+        return place
     }
 }

@@ -55,10 +55,22 @@ final class PlacesService {
         }
     }
 
-    func search(query: String, city: City) async -> [Place] {
-        let results = await backend.search(query: query, city: city)
-        ingest(results)
-        return results
+    /// Resolves a search-autocomplete suggestion into a full `Place` and ingests
+    /// it, so the POI sheet finds it in `snapshot` without a second round-trip.
+    func resolveSearchResult(
+        placeId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async -> Place? {
+        guard let place = await backend.resolveSearchResult(
+            placeId: placeId,
+            sessionToken: sessionToken,
+            cityId: cityId,
+            mode: mode
+        ) else { return nil }
+        snapshot[place.id] = place
+        return place
     }
 
     func place(id: UUID) -> Place? {

@@ -46,13 +46,14 @@ final class MockPlacesBackend: PlacesBackend {
         }
     }
 
-    func search(query: String, city: City) async -> [Place] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return [] }
-        return MockSeed.places(for: city).filter {
-            $0.name.lowercased().contains(trimmed)
-                || $0.category.lowercased().contains(trimmed)
-                || $0.tags.contains(where: { $0.lowercased().contains(trimmed) })
+    func resolveSearchResult(
+        placeId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async -> Place? {
+        MockSeed.allPlaces.first {
+            $0.googlePlaceId == placeId || $0.id.uuidString == placeId
         }
     }
 

@@ -13,7 +13,12 @@ struct SearchView: View {
     private var dismiss
 
     @State private var viewModel: SearchViewModel?
+    @State private var pendingCity: SearchSuggestion?
+    @State private var openingPlaceId: String?
+    @State private var isSwitchingCity: Bool = false
     @FocusState private var isFocused: Bool
+
+    private static let tryTerms = ["Cafés", "Restaurants", "Museums", "Parks", "Viewpoints", "Bars"]
 
     var body: some View {
         NavigationStack {
@@ -27,6 +32,19 @@ struct SearchView: View {
                     }
                 }
         }
+        .overlay {
+            if let pendingCity {
+                CitySwitchConfirmCard(
+                    cityName: pendingCity.primaryText,
+                    currentCityName: cityService.activeCity.name,
+                    isSwitching: isSwitchingCity,
+                    onCancel: { self.pendingCity = nil },
+                    onConfirm: { confirmCitySwitch(pendingCity) }
+                )
+                .transition(.opacity)
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: pendingCity)
         .onAppear {
             if viewModel == nil {
                 viewModel = SearchViewModel(
@@ -46,17 +64,25 @@ struct SearchView: View {
             VStack(spacing: 0) {
                 searchField(viewModel)
                 Divider().background(AppColor.dividerSoft)
-
-                if viewModel.query.trimmingCharacters(in: .whitespaces).isEmpty {
-                    recents(viewModel)
-                } else if viewModel.results.isEmpty {
-                    emptyState
-                } else {
-                    resultList(viewModel)
-                }
+                results(viewModel)
             }
         } else {
             ProgressView()
+        }
+    }
+
+    @ViewBuilder
+    private func results(_ vm: SearchViewModel) -> some View {
+        if vm.isQueryEmpty {
+            recents(vm)
+        } else if vm.isLoading, !vm.hasResults {
+            loadingState
+        } else if let message = vm.errorMessage, !vm.hasResults {
+            errorState(message)
+        } else if !vm.hasResults {
+            emptyState
+        } else {
+            resultList(vm)
         }
     }
 
@@ -65,20 +91,15 @@ struct SearchView: View {
         return HStack(spacing: Spacing.xs) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(AppColor.textSecondary)
-            TextField("Search places, categories, tags", text: $vm.query)
+            TextField("Search places or cities", text: $vm.query)
                 .focused($isFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-                .onChange(of: vm.query) { _, newValue in
-                    vm.onQueryChange(newValue)
-                }
-                .onSubmit { vm.performSearch() }
 
             if !vm.query.isEmpty {
                 Button {
-                    vm.query = ""
-                    vm.onQueryChange("")
+                    vm.clearQuery()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(AppColor.textTertiary)
@@ -93,6 +114,8 @@ struct SearchView: View {
         .padding(.horizontal, Spacing.lg)
         .padding(.vertical, Spacing.sm)
     }
+
+    // MARK: - Idle state
 
     private func recents(_ vm: SearchViewModel) -> some View {
         ScrollView {
@@ -158,7 +181,7 @@ struct SearchView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(["Old Town", "Cafés", "Viewpoints", "Sauna", "Markets"], id: \.self) { term in
+                    ForEach(Self.tryTerms, id: \.self) { term in
                         Button {
                             vm.applyRecent(term)
                         } label: {
@@ -178,80 +201,116 @@ struct SearchView: View {
         }
     }
 
+    // MARK: - Results
+
     private func resultList(_ vm: SearchViewModel) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(vm.results) { place in
-                    Button {
-                        let ids = vm.results.map(\.id)
-                        router.dismissSheet()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                            router.openPOI(place.id, in: ids)
+                if !vm.citySuggestions.isEmpty {
+                    sectionHeader("Cities")
+                    ForEach(vm.citySuggestions) { suggestion in
+                        Button {
+                            pendingCity = suggestion
+                        } label: {
+                            row(suggestion)
                         }
-                    } label: {
-                        resultRow(place)
+                        .buttonStyle(.plain)
+                        Divider().background(AppColor.dividerSoft).padding(.leading, 76)
                     }
-                    .buttonStyle(.plain)
-                    Divider().background(AppColor.dividerSoft).padding(.leading, 76)
+                }
+
+                if !vm.placeSuggestions.isEmpty {
+                    sectionHeader("Places")
+                    ForEach(vm.placeSuggestions) { suggestion in
+                        Button {
+                            openPlace(suggestion, using: vm)
+                        } label: {
+                            row(suggestion)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(openingPlaceId != nil)
+                        Divider().background(AppColor.dividerSoft).padding(.leading, 76)
+                    }
+                }
+
+                if vm.isLoading {
+                    SearchInlineSpinner()
                 }
             }
             .padding(.top, Spacing.xs)
         }
     }
 
-    private func resultRow(_ place: Place) -> some View {
-        HStack(spacing: Spacing.sm) {
-            ZStack {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                    .fill(place.mode.tintColor)
-                Image(systemName: place.mode.iconSymbol)
-                    .foregroundStyle(place.mode.color)
-                    .font(.system(size: 20, weight: .semibold))
-            }
-            .frame(width: 52, height: 52)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(place.name)
-                    .font(.subheadline15.weight(.semibold))
-                    .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(place.category)
-                    Text("·").foregroundStyle(AppColor.textTertiary)
-                    Text(place.budgetLabel)
-                    Text("·").foregroundStyle(AppColor.textTertiary)
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(AppColor.warning)
-                    Text(String(format: "%.1f", place.rating))
-                }
-                .font(.caption12)
-                .foregroundStyle(AppColor.textSecondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption12)
-                .foregroundStyle(AppColor.textTertiary)
-        }
-        .padding(.horizontal, Spacing.lg)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption11Bold)
+            .tracking(0.8)
+            .foregroundStyle(AppColor.textSecondary)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.md)
+            .padding(.bottom, Spacing.xs)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: Spacing.sm) {
+    private func row(_ suggestion: SearchSuggestion) -> some View {
+        SearchSuggestionRow(
+            suggestion: suggestion,
+            mode: prefs.activeMode,
+            isResolving: openingPlaceId == suggestion.placeId
+        )
+    }
+
+    // MARK: - Placeholder states
+
+    private var loadingState: some View {
+        VStack {
             Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 36))
-                .foregroundStyle(AppColor.textTertiary)
-            Text("No results found")
-                .font(.headline17)
-                .foregroundStyle(AppColor.textPrimary)
-            Text("Try a different term or switch cities.")
-                .font(.footnote13)
-                .foregroundStyle(AppColor.textSecondary)
+            SearchInlineSpinner()
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func errorState(_ message: String) -> some View {
+        SearchPlaceholderState(
+            symbol: "exclamationmark.triangle",
+            symbolColor: AppColor.warning,
+            title: nil,
+            message: message
+        )
+    }
+
+    private var emptyState: some View {
+        SearchPlaceholderState(
+            symbol: "magnifyingglass",
+            symbolColor: AppColor.textTertiary,
+            title: "No results found",
+            message: "Try a different term, or search for a city to travel there."
+        )
+    }
+
+    // MARK: - Actions
+
+    private func openPlace(_ suggestion: SearchSuggestion, using vm: SearchViewModel) {
+        guard openingPlaceId == nil else { return }
+        openingPlaceId = suggestion.placeId
+        Task { @MainActor in
+            let place = await vm.openPlace(suggestion)
+            openingPlaceId = nil
+            guard let place else { return }
+            router.openPOIFromSheet(place.id, in: [place.id])
+        }
+    }
+
+    private func confirmCitySwitch(_ suggestion: SearchSuggestion) {
+        guard let viewModel, !isSwitchingCity else { return }
+        isSwitchingCity = true
+        Task { @MainActor in
+            let didSwitch = await viewModel.switchCity(to: suggestion)
+            isSwitchingCity = false
+            pendingCity = nil
+            if didSwitch {
+                router.dismissSheet()
+            }
+        }
     }
 }

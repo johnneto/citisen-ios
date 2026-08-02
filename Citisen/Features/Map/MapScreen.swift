@@ -83,6 +83,9 @@ struct MapScreen: View {
         .onChange(of: prefs.activeMode) { _, _ in
             viewModel?.applyCacheOrIdle()
         }
+        .onChange(of: places.keptSpotIds) { _, _ in
+            viewModel?.noteKeptSpotsChanged()
+        }
         .onChange(of: router.recenterTrigger) { _, _ in
             guard let id = router.poiSelectedId,
                   let vm = viewModel,
@@ -147,6 +150,21 @@ struct MapScreen: View {
                     .accessibilityLabel(Text("\(place.name), \(place.category)"))
                 }
             }
+
+            // The open place when it has no pin of its own — opened from search,
+            // or a curated spot currently excluded by a sub-filter. Without this
+            // the camera pans to a bare stretch of map while its sheet is up.
+            if let place = detachedSelection(excluding: filteredIds) {
+                Annotation(place.name, coordinate: place.coordinate.clLocation) {
+                    Button {
+                        router.requestPOIRecenter()
+                    } label: {
+                        MapPinView(mode: place.mode, isSelected: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("\(place.name), \(place.category)"))
+                }
+            }
         }
         .onMapCameraChange(frequency: .continuous) { context in
             // Both writes intentionally avoid the @Observable graph of the Map
@@ -168,6 +186,14 @@ struct MapScreen: View {
 
     private func isCurrent(_ place: Place) -> Bool {
         router.presentedSheet == .poi && router.poiSelectedId == place.id
+    }
+
+    /// The place whose sheet is open when it isn't among the rendered pins.
+    private func detachedSelection(excluding pinnedIds: [UUID]) -> Place? {
+        guard router.presentedSheet == .poi,
+              let selectedId = router.poiSelectedId,
+              !pinnedIds.contains(selectedId) else { return nil }
+        return places.place(id: selectedId)
     }
 
     @ViewBuilder

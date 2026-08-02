@@ -9,19 +9,36 @@ enum PlaceMapper {
         city: City,
         mode: TravelMode
     ) -> Place? {
-        build(from: details, curated: curated, cityId: city.id, mode: mode, fullDetails: false)
+        build(
+            from: details,
+            curated: curated,
+            cityId: city.id,
+            mode: mode,
+            fullDetails: false,
+            source: .aiCurated
+        )
     }
 
     /// Maps a Google place fetched with the full Place Details mask when no
     /// curated metadata is available (e.g. opening a saved spot after its
     /// Gemini cache expired, or a place opened from search). Uses the
-    /// persisted `cityId` and `mode`.
+    /// persisted `cityId` and `mode`. `source` defaults to `.aiCurated` so only
+    /// the search path — which passes `.userSearch` explicitly — is offered for
+    /// keeping; a saved-spot refetch keeps its original provenance.
     static func makePlace(
         from details: PlaceV1,
         cityId: String,
-        mode: TravelMode
+        mode: TravelMode,
+        source: PlaceSource = .aiCurated
     ) -> Place? {
-        build(from: details, curated: nil, cityId: cityId, mode: mode, fullDetails: true)
+        build(
+            from: details,
+            curated: nil,
+            cityId: cityId,
+            mode: mode,
+            fullDetails: true,
+            source: source
+        )
     }
 
     private static func build(
@@ -29,7 +46,8 @@ enum PlaceMapper {
         curated: CuratedSpot?,
         cityId: String,
         mode: TravelMode,
-        fullDetails: Bool
+        fullDetails: Bool,
+        source: PlaceSource
     ) -> Place? {
         guard let location = details.location else { return nil }
         let id = Place.id(forGooglePlaceId: details.id)
@@ -77,13 +95,15 @@ enum PlaceMapper {
             phone: details.internationalPhoneNumber ?? details.nationalPhoneNumber,
             photoNames: photoNames(from: details.photos),
             businessStatus: businessStatus(details.businessStatus),
-            detailsFetchedAt: fullDetails ? Date() : nil
+            detailsFetchedAt: fullDetails ? Date() : nil,
+            source: source
         )
     }
 
     /// Merges a freshly fetched full-details place over an existing one,
     /// preserving the curated rationale and tags (neighborhood) that only the
-    /// original Gemini resolution carries.
+    /// original Gemini resolution carries — and its provenance, so enriching a
+    /// kept spot doesn't relabel it as an AI suggestion.
     static func merge(fullDetails fresh: Place, preservingCuratedFrom original: Place) -> Place {
         Place(
             id: fresh.id,
@@ -109,7 +129,8 @@ enum PlaceMapper {
             phone: fresh.phone,
             photoNames: fresh.photoNames,
             businessStatus: fresh.businessStatus,
-            detailsFetchedAt: fresh.detailsFetchedAt
+            detailsFetchedAt: fresh.detailsFetchedAt,
+            source: original.source
         )
     }
 

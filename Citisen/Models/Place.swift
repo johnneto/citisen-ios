@@ -98,6 +98,8 @@ struct Place: Identifiable, Hashable, Codable {
     /// fetched. nil for places resolved with the cheaper search field mask —
     /// the POI sheet enriches those lazily on first open.
     let detailsFetchedAt: Date?
+    /// How this place was discovered. See `PlaceSource`.
+    let source: PlaceSource
 
     init(
         id: UUID,
@@ -123,7 +125,8 @@ struct Place: Identifiable, Hashable, Codable {
         phone: String?,
         photoNames: [String]? = nil,
         businessStatus: BusinessStatus = .unknown,
-        detailsFetchedAt: Date? = nil
+        detailsFetchedAt: Date? = nil,
+        source: PlaceSource = .aiCurated
     ) {
         self.id = id
         self.googlePlaceId = googlePlaceId
@@ -149,6 +152,7 @@ struct Place: Identifiable, Hashable, Codable {
         self.photoNames = photoNames
         self.businessStatus = businessStatus
         self.detailsFetchedAt = detailsFetchedAt
+        self.source = source
     }
 
     static func id(forGooglePlaceId googlePlaceId: String) -> UUID {
@@ -198,6 +202,39 @@ struct Place: Identifiable, Hashable, Codable {
         utcOffsetMinutes.flatMap { TimeZone(secondsFromGMT: $0 * 60) }
     }
 
+    /// Restamps provenance, leaving every other field untouched. `Place` is
+    /// immutable by design, so keeping a searched spot produces a copy rather
+    /// than a mutation.
+    func withSource(_ source: PlaceSource) -> Place {
+        Place(
+            id: id,
+            googlePlaceId: googlePlaceId,
+            cityId: cityId,
+            name: name,
+            category: category,
+            mode: mode,
+            coordinate: coordinate,
+            rating: rating,
+            reviewCount: reviewCount,
+            priceLevel: priceLevel,
+            description: description,
+            descriptionIsCurated: descriptionIsCurated,
+            tags: tags,
+            openingHours: openingHours,
+            openingPeriods: openingPeriods,
+            weekdayText: weekdayText,
+            utcOffsetMinutes: utcOffsetMinutes,
+            reviews: reviews,
+            address: address,
+            website: website,
+            phone: phone,
+            photoNames: photoNames,
+            businessStatus: businessStatus,
+            detailsFetchedAt: detailsFetchedAt,
+            source: source
+        )
+    }
+
     /// Backward-compatible decoding: fields added after the first cache format
     /// fall back to nil/false so previously cached JSON still decodes.
     init(from decoder: Decoder) throws {
@@ -226,6 +263,7 @@ struct Place: Identifiable, Hashable, Codable {
         self.photoNames = try container.decodeIfPresent([String].self, forKey: .photoNames)
         self.businessStatus = try container.decodeIfPresent(BusinessStatus.self, forKey: .businessStatus) ?? .unknown
         self.detailsFetchedAt = try container.decodeIfPresent(Date.self, forKey: .detailsFetchedAt)
+        self.source = try container.decodeIfPresent(PlaceSource.self, forKey: .source) ?? .aiCurated
     }
 
     func distance(from origin: CLLocationCoordinate2D) -> CLLocationDistance {

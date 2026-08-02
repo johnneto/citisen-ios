@@ -49,6 +49,13 @@ protocol PlacesBackend: AnyObject {
         mode: TravelMode?
     ) async -> PlaceResolution
 
+    /// Fetches the full Place Details payload (reviews, editorial summary) for
+    /// a place that was resolved with the cheaper search field mask, preserving
+    /// its curated description and tags. Returns nil when the place is already
+    /// enriched, has no Google id, or the fetch fails — callers keep the
+    /// original place in that case.
+    func enrichPlace(_ place: Place) async -> Place?
+
     func clearCache(forCityId cityId: String)
 
     /// Returns the most recently cached non-empty spot list for the given city + mode,

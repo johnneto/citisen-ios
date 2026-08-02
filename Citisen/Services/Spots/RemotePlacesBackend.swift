@@ -140,6 +140,24 @@ final class RemotePlacesBackend: PlacesBackend {
         return .notFound
     }
 
+    func enrichPlace(_ place: Place) async -> Place? {
+        guard place.detailsFetchedAt == nil, let googlePlaceId = place.googlePlaceId else {
+            return nil
+        }
+        do {
+            guard let details = try await places.placeDetails(id: googlePlaceId),
+                  let fresh = PlaceMapper.makePlace(from: details, cityId: place.cityId, mode: place.mode) else {
+                return nil
+            }
+            let merged = PlaceMapper.merge(fullDetails: fresh, preservingCuratedFrom: place)
+            cache.savePlace(merged)
+            return merged
+        } catch {
+            AppLog.places.error("enrichPlace failed for \(googlePlaceId, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     func clearCache(forCityId cityId: String) {
         cache.clearLists(forCityId: cityId)
     }
@@ -278,25 +296,43 @@ final class RemotePlacesBackend: PlacesBackend {
         let query = "\(curated.name), \(city.name)"
         let typeHint = curated.primaryType?.trimmingCharacters(in: .whitespaces)
         let normalizedHint = (typeHint?.isEmpty == false) ? typeHint : nil
+        // Bias over the whole viewport so outskirt suggestions aren't punished
+        // (Places caps the circle at 50 km).
+        let biasRadius = min(max(viewport.radiusKm * 1000, 5_000), 50_000)
+        let context = PlaceResolutionScorer.Context(
+            curatedName: curated.name,
+            cityCenter: viewport.center,
+            cityRadiusMeters: biasRadius
+        )
         do {
-            var details = try await places.searchText(
+            var candidates = try await places.searchTextCandidates(
                 query: query,
                 near: viewport.center,
+                radius: biasRadius,
                 includedType: normalizedHint
             )
-            // If the type-filtered search returned nothing, the Gemini hint was
-            // likely wrong — retry without it so we still pick up the place.
-            if details == nil, normalizedHint != nil {
+            var choice = PlaceResolutionScorer.pickBest(candidates, context: context)
+            // If the type-filtered search produced nothing usable, the Gemini hint
+            // was likely wrong — retry without it so we still pick up the place.
+            if choice == nil, normalizedHint != nil {
                 AppLog.places.debug("No type-filtered match for \(curated.name, privacy: .public) (hint=\(normalizedHint ?? "-", privacy: .public)); retrying without includedType")
-                details = try await places.searchText(query: query, near: viewport.center)
+                candidates = try await places.searchTextCandidates(
+                    query: query,
+                    near: viewport.center,
+                    radius: biasRadius
+                )
+                choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             }
-            guard let details else {
+            guard let choice else {
                 AppLog.places.debug("No match for \(curated.name, privacy: .public)")
                 return nil
             }
+            if choice.index != 0 {
+                AppLog.places.info("Ranking override for \(curated.name, privacy: .public): picked #\(choice.index) '\(choice.place.displayName?.text ?? "-", privacy: .public)' score=\(String(format: "%.2f", choice.score), privacy: .public) nameSim=\(String(format: "%.2f", choice.nameSimilarity), privacy: .public) ratings=\(choice.place.userRatingCount ?? 0)")
+            }
             try Task.checkCancellation()
             return PlaceMapper.makePlace(
-                from: details,
+                from: choice.place,
                 curated: curated,
                 city: city,
                 mode: mode

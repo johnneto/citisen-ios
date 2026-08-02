@@ -20,6 +20,7 @@ final class UserPreferencesService {
         static let cityPinned = "citisen.cityPinned"
         static let spotsCacheMigratedV2 = "citisen.spotsCacheMigratedV2"
         static let spotsListCacheClearedForPhotos10 = "citisen.spotsListCacheClearedForPhotos10"
+        static let spotsCacheClearedForDetailsV3 = "citisen.spotsCacheClearedForDetailsV3"
     }
 
     static let maxRecentCities = 10
@@ -131,6 +132,13 @@ final class UserPreferencesService {
         didSet { defaults.set(spotsListCacheClearedForPhotos10, forKey: Keys.spotsListCacheClearedForPhotos10) }
     }
 
+    /// One-shot flag: wipes both `list_*` and `place_*` spot caches once after
+    /// the details-pipeline rework so every place immediately carries structured
+    /// opening periods and the place's UTC offset.
+    var spotsCacheClearedForDetailsV3: Bool {
+        didSet { defaults.set(spotsCacheClearedForDetailsV3, forKey: Keys.spotsCacheClearedForDetailsV3) }
+    }
+
     var user: UserProfile = .placeholder
 
     private let defaults: UserDefaults
@@ -147,6 +155,7 @@ final class UserPreferencesService {
         self.lastSessionCityId = defaults.string(forKey: Keys.lastSessionCityId)
         self.spotsCacheMigratedV2 = defaults.bool(forKey: Keys.spotsCacheMigratedV2)
         self.spotsListCacheClearedForPhotos10 = defaults.bool(forKey: Keys.spotsListCacheClearedForPhotos10)
+        self.spotsCacheClearedForDetailsV3 = defaults.bool(forKey: Keys.spotsCacheClearedForDetailsV3)
 
         if let data = defaults.data(forKey: Keys.lastDynamicCity),
            let decoded = try? JSONDecoder().decode(City.self, from: data) {

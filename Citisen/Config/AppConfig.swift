@@ -58,17 +58,26 @@ enum AppConfig {
         static let placesAutocomplete = "\(placesBase)/places:autocomplete"
         static let placesDetailsBase = "\(placesBase)/places"
 
-        private static let placeFieldPaths = [
+        /// Fields needed for list cards, map pins and the compact POI detent —
+        /// used by the bulk Text Search resolution calls. Deliberately excludes
+        /// `reviews` and `editorialSummary`, which would put every one of the
+        /// 20–60 resolution calls per city/mode into the top-priced SKU; those
+        /// load lazily via Place Details when a sheet is actually opened.
+        private static let searchFieldPaths = [
             "id", "displayName", "formattedAddress", "location",
             "rating", "userRatingCount", "priceLevel",
             "primaryType", "types",
-            "regularOpeningHours", "currentOpeningHours", "websiteUri",
-            "nationalPhoneNumber", "internationalPhoneNumber",
-            "reviews", "editorialSummary", "photos",
-            "businessStatus"
+            "regularOpeningHours", "currentOpeningHours", "utcOffsetMinutes",
+            "websiteUri", "nationalPhoneNumber", "internationalPhoneNumber",
+            "photos", "businessStatus"
         ]
 
-        static let searchTextFieldMask = placeFieldPaths
+        /// Full payload for a single opened place (adds reviews + editorial summary).
+        private static let placeFieldPaths = searchFieldPaths + [
+            "reviews", "editorialSummary"
+        ]
+
+        static let searchTextFieldMask = searchFieldPaths
             .map { "places.\($0)" }
             .joined(separator: ",")
         static let placeDetailsFieldMask = placeFieldPaths.joined(separator: ",")

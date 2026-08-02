@@ -21,6 +21,8 @@ struct POISheetView: View {
     private var prefs
     @Environment(AppRouter.self)
     private var router
+    @Environment(LocationService.self)
+    private var locationService
 
     @Query private var savedQueryResults: [SavedSpotEntity]
 
@@ -53,19 +55,19 @@ struct POISheetView: View {
             }
         }
         .task(id: place.id) {
-            if viewModel == nil {
-                viewModel = POISheetViewModel(
-                    place: place,
-                    context: modelContext,
-                    cityInfoProvider: { [cityService, prefs, place] in
-                        Self.resolveCityInfo(
-                            for: place.cityId,
-                            cityService: cityService,
-                            prefs: prefs
-                        )
-                    }
-                )
-            }
+            // Recreate on every place change so a reused sheet never shows the
+            // previous place's state (hours expansion, save menu, city info).
+            viewModel = POISheetViewModel(
+                place: place,
+                context: modelContext,
+                cityInfoProvider: { [cityService, prefs, place] in
+                    Self.resolveCityInfo(
+                        for: place.cityId,
+                        cityService: cityService,
+                        prefs: prefs
+                    )
+                }
+            )
         }
         .onChange(of: place.id) { _, _ in
             visibleCarouselCount = AppConfig.Spots.initialPhotoBatchSize
@@ -208,33 +210,59 @@ struct POISheetView: View {
                 .accessibilityHint("Double tap to focus map on this place. Long press to copy name.")
 
             HStack(spacing: 8) {
-                Text(place.formattedDistance(from: cityService.activeCity.center.clLocation) + " away")
-                Text("·").foregroundStyle(AppColor.textTertiary)
-                Text(place.budgetLabel)
-                Text("·").foregroundStyle(AppColor.textTertiary)
-                HStack(spacing: 3) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppColor.warning)
-                    Text(String(format: "%.1f", place.rating))
+                Text(distanceText)
+                if let budget = place.budgetLabel {
+                    Text("·").foregroundStyle(AppColor.textTertiary)
+                    Text(budget)
                 }
-                Text("(\(place.reviewCount))")
-                    .foregroundStyle(AppColor.textTertiary)
+                Text("·").foregroundStyle(AppColor.textTertiary)
+                if let rating = place.rating {
+                    HStack(spacing: 3) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(AppColor.warning)
+                        Text(String(format: "%.1f", rating))
+                    }
+                    Text("(\(place.reviewCount))")
+                        .foregroundStyle(AppColor.textTertiary)
+                } else {
+                    Text("No ratings yet")
+                        .foregroundStyle(AppColor.textTertiary)
+                }
             }
             .font(.footnote13)
             .foregroundStyle(AppColor.textSecondary)
         }
     }
 
+    /// Distance from the user when they are physically inside the browsed city;
+    /// otherwise from the city center (labelled as such), so the number is never
+    /// misleading when browsing a city remotely.
+    private var distanceText: String {
+        let cityCenter = cityService.activeCity.center.clLocation
+        if let userLocation = locationService.currentLocation {
+            let userToCityCenter = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
+                .distance(from: CLLocation(latitude: cityCenter.latitude, longitude: cityCenter.longitude))
+            if userToCityCenter <= AppConfig.Search.locationBiasRadiusMeters {
+                return place.formattedDistance(from: userLocation) + " away"
+            }
+        }
+        return place.formattedDistance(from: cityCenter) + " from center"
+    }
+
     @ViewBuilder private var whyVisitRow: some View {
+        // The sparkles "why visit" framing is reserved for the AI rationale;
+        // Google editorial summaries and fallbacks render as plain copy.
         let trimmed = place.description.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(place.mode.color)
+                if place.descriptionIsCurated {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(place.mode.color)
+                }
                 Text(trimmed)
-                    .font(.footnote13.italic())
+                    .font(place.descriptionIsCurated ? .footnote13.italic() : .footnote13)
                     .foregroundStyle(AppColor.textSecondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -303,6 +331,11 @@ struct POISheetView: View {
 
     private var descriptionBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if place.descriptionIsCurated {
+                Label("Why visit", systemImage: "sparkles")
+                    .font(.caption12.weight(.semibold))
+                    .foregroundStyle(place.mode.color)
+            }
             Text(place.description)
                 .font(.subheadline15)
                 .foregroundStyle(AppColor.textSecondary)
@@ -314,8 +347,9 @@ struct POISheetView: View {
         @Bindable var vm = vm
         let isBusinessClosed = place.businessStatus == .closedTemporarily
             || place.businessStatus == .closedPermanently
-        let hasHours = place.openingHours.hasAny
-        let isCollapsible = !isBusinessClosed && hasHours
+        let weekLines = place.weekdayLines
+        let status = place.openStatus()
+        let isCollapsible = !isBusinessClosed && weekLines != nil
         return VStack(alignment: .leading, spacing: 6) {
             Button {
                 guard isCollapsible else { return }
@@ -335,16 +369,34 @@ struct POISheetView: View {
                                 .foregroundStyle(AppColor.danger)
                                 .fontWeight(.semibold)
                         default:
-                            if hasHours {
-                                Text(place.isOpenNow ? "Open now" : "Closed")
-                                    .foregroundStyle(place.isOpenNow ? AppColor.success : AppColor.danger)
+                            switch status {
+                            case .open(let closesAt):
+                                Text("Open now")
+                                    .foregroundStyle(AppColor.success)
                                     .fontWeight(.semibold)
-                                if place.isOpenNow, let closes = place.closesAt {
-                                    Text(" · Closes \(closes)").foregroundStyle(AppColor.textSecondary)
+                                if let closesAt {
+                                    Text(" · Closes \(localTime(closesAt))")
+                                        .foregroundStyle(AppColor.textSecondary)
+                                } else {
+                                    Text(" · 24 hours")
+                                        .foregroundStyle(AppColor.textSecondary)
                                 }
-                            } else {
-                                Text("No opening information available")
-                                    .foregroundStyle(AppColor.textSecondary)
+                            case .closed(let opensAt):
+                                Text("Closed")
+                                    .foregroundStyle(AppColor.danger)
+                                    .fontWeight(.semibold)
+                                if let opensAt {
+                                    Text(" · Opens \(localTime(opensAt))")
+                                        .foregroundStyle(AppColor.textSecondary)
+                                }
+                            case .unknown:
+                                if weekLines != nil {
+                                    Text("Opening hours")
+                                        .foregroundStyle(AppColor.textPrimary)
+                                } else {
+                                    Text("No opening information available")
+                                        .foregroundStyle(AppColor.textSecondary)
+                                }
                             }
                         }
                     }
@@ -360,22 +412,38 @@ struct POISheetView: View {
             .buttonStyle(.plain)
             .disabled(!isCollapsible)
 
-            if vm.isHoursExpanded && isCollapsible {
-                weeklyHoursDetail
+            if vm.isHoursExpanded, let weekLines {
+                weeklyHoursDetail(lines: weekLines)
             }
         }
     }
 
-    private var weeklyHoursDetail: some View {
+    /// Formats a moment as clock time in the place's own timezone, so "Closes
+    /// 22:00" means 22:00 at the venue even when browsing from another region.
+    private func localTime(_ date: Date) -> String {
+        var style = Date.FormatStyle.dateTime.hour(.defaultDigits(amPM: .abbreviated)).minute()
+        style.timeZone = place.timeZone ?? .current
+        return date.formatted(style)
+    }
+
+    /// Renders Google's weekday lines verbatim, bolding only the day prefix.
+    private func weeklyHoursDetail(lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(place.openingHours.weekList.enumerated()), id: \.offset) { _, entry in
-                HStack {
-                    Text(entry.day).frame(width: 36, alignment: .leading)
-                        .foregroundStyle(AppColor.textSecondary)
-                    Text(entry.hours)
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                if let separator = line.range(of: ": ") {
+                    HStack(alignment: .top) {
+                        Text(line[..<separator.lowerBound])
+                            .foregroundStyle(AppColor.textSecondary)
+                            .frame(width: 84, alignment: .leading)
+                        Text(line[separator.upperBound...])
+                            .foregroundStyle(AppColor.textPrimary)
+                    }
+                    .font(.caption12)
+                } else {
+                    Text(line)
+                        .font(.caption12)
                         .foregroundStyle(AppColor.textPrimary)
                 }
-                .font(.caption12)
             }
         }
         .padding(.leading, 22)
@@ -402,22 +470,24 @@ struct POISheetView: View {
                         .foregroundStyle(BrandColor.sand)
                 }
             }
-            Button(action: copyAddress) {
-                HStack(spacing: 6) {
-                    Image(systemName: "mappin.circle")
-                    Text(place.address)
-                        .multilineTextAlignment(.leading)
-                    Spacer(minLength: 6)
-                    Image(systemName: didCopyAddress ? "checkmark" : "doc.on.doc")
-                        .foregroundStyle(didCopyAddress ? AppColor.success : AppColor.textTertiary)
+            if let address = place.address {
+                Button(action: copyAddress) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin.circle")
+                        Text(address)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 6)
+                        Image(systemName: didCopyAddress ? "checkmark" : "doc.on.doc")
+                            .foregroundStyle(didCopyAddress ? AppColor.success : AppColor.textTertiary)
+                    }
+                    .font(.caption12)
+                    .foregroundStyle(AppColor.textSecondary)
+                    .contentShape(Rectangle())
                 }
-                .font(.caption12)
-                .foregroundStyle(AppColor.textSecondary)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(didCopyAddress ? "Address copied" : "Copy address")
+                .accessibilityValue(address)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(didCopyAddress ? "Address copied" : "Copy address")
-            .accessibilityValue(place.address)
         }
     }
 

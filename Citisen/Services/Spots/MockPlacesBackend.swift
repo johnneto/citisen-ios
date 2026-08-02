@@ -73,6 +73,8 @@ final class MockPlacesBackend: PlacesBackend {
         return .notFound
     }
 
+    func enrichPlace(_ place: Place) async -> Place? { nil }
+
     func clearCache(forCityId cityId: String) {}
 
     func cachedSpots(city: City, mode: TravelMode) -> [Place]? { nil }

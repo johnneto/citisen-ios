@@ -11,12 +11,16 @@ final class GooglePlacesClient {
         self.keychain = keychain
     }
 
-    func searchText(
+    /// Text Search (New). Returns up to `maxResults` candidates in Google's
+    /// ranking order so the caller can pick the official listing among dupes.
+    /// Billing is per request, not per result, so asking for 5 costs the same as 1.
+    func searchTextCandidates(
         query: String,
         near center: CLLocationCoordinate2D,
         radius: Double = 5_000,
-        includedType: String? = nil
-    ) async throws -> PlaceV1? {
+        includedType: String? = nil,
+        maxResults: Int = 5
+    ) async throws -> [PlaceV1] {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
         guard let url = URL(string: AppConfig.Endpoints.placesSearchText) else {
@@ -31,7 +35,7 @@ final class GooglePlacesClient {
                     radius: radius
                 )
             ),
-            maxResultCount: 1,
+            maxResultCount: maxResults,
             includedType: includedType,
             strictTypeFiltering: includedType == nil ? nil : true
         )
@@ -45,7 +49,7 @@ final class GooglePlacesClient {
         request.httpBody = try JSONEncoder().encode(payload)
 
         let response: SearchTextResponse = try await http.send(request)
-        return response.places?.first
+        return response.places ?? []
     }
 
     /// Fetches full place details. Pass the `sessionToken` from a preceding

@@ -286,6 +286,7 @@ private struct POIPage: View {
     private func load() async {
         if let snapshot = places.place(id: placeId) {
             resolved = snapshot
+            await enrichIfNeeded(snapshot)
             return
         }
         let entity = savedEntity
@@ -298,10 +299,21 @@ private struct POIPage: View {
         switch result {
         case .found(let place):
             resolved = place
+            await enrichIfNeeded(place)
         case .notFound:
             notFound = true
         case .transientFailure:
             transientFailure = true
+        }
+    }
+
+    /// Cheap-mask places carry no reviews/editorial summary; upgrade them with
+    /// one Place Details call the first time the sheet actually shows them.
+    private func enrichIfNeeded(_ place: Place) async {
+        guard place.detailsFetchedAt == nil else { return }
+        let enriched = await places.enrichPlace(place)
+        if enriched.id == placeId {
+            resolved = enriched
         }
     }
 }

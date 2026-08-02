@@ -92,6 +92,8 @@ final class HTTPClient {
             return .placesQuota(detail: detail)
         case "PERMISSION_DENIED", "UNAUTHENTICATED", "FAILED_PRECONDITION":
             return .placesUnauthorized(detail: detail)
+        case "NOT_FOUND":
+            return .placesNotFound(request.url?.lastPathComponent ?? "place")
         default:
             break
         }
@@ -99,6 +101,10 @@ final class HTTPClient {
         switch httpCode {
         case 401, 403:
             return .placesUnauthorized(detail: detail)
+        case 404:
+            // A deleted/invalid Google place id — callers surface a "not found"
+            // state with a Remove action instead of a transient error.
+            return .placesNotFound(request.url?.lastPathComponent ?? "place")
         case 429:
             return .placesQuota(detail: detail)
         default:

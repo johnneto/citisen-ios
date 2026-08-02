@@ -105,6 +105,17 @@ final class PlacesService {
         return result
     }
 
+    /// Lazily upgrades a cheap-mask place to the full Place Details payload
+    /// (reviews, editorial summary) when the POI sheet opens it. Returns the
+    /// enriched place, or the original when it is already enriched or the
+    /// fetch fails.
+    func enrichPlace(_ place: Place) async -> Place {
+        guard place.detailsFetchedAt == nil else { return place }
+        guard let enriched = await backend.enrichPlace(place) else { return place }
+        snapshot[enriched.id] = enriched
+        return enriched
+    }
+
     func clearCache(forCityId cityId: String) {
         backend.clearCache(forCityId: cityId)
         snapshot = snapshot.filter { $0.value.cityId != cityId }

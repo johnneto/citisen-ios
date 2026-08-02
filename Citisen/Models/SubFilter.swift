@@ -32,9 +32,9 @@ enum SubFilter: String, CaseIterable, Identifiable, Codable, Hashable {
     func matches(_ place: Place) -> Bool {
         switch self {
         case .openNow: return place.isOpenNow
-        case .topRated: return place.rating >= 4.5
-        case .fourPlus: return place.rating >= 4
-        case .lowBudget: return place.priceLevel <= 1
+        case .topRated: return (place.rating ?? 0) >= 4.5
+        case .fourPlus: return (place.rating ?? 0) >= 4
+        case .lowBudget: return place.priceLevel.map { $0 <= 1 } ?? false
         case .newInCity: return place.tags.contains("New")
         }
     }

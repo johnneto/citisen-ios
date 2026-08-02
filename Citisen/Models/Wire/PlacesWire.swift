@@ -58,6 +58,7 @@ struct PlaceV1: Decodable {
     let photos: [PhotoV1]?
     let addressComponents: [AddressComponentV1]?
     let businessStatus: String?
+    let utcOffsetMinutes: Int?
 }
 
 struct AddressComponentV1: Decodable {
@@ -136,6 +137,18 @@ struct LatLngV1: Codable {
 struct OpeningHoursV1: Decodable {
     let openNow: Bool?
     let weekdayDescriptions: [String]?
+    let periods: [PeriodV1]?
+
+    struct PeriodV1: Decodable {
+        let open: PointV1?
+        let close: PointV1?   // absent close on a lone period = open 24/7
+
+        struct PointV1: Decodable {
+            let day: Int?     // 0 = Sunday … 6 = Saturday
+            let hour: Int?
+            let minute: Int?
+        }
+    }
 }
 
 struct ReviewV1: Decodable {

@@ -96,8 +96,9 @@ final class CitisenTests: XCTestCase {
         XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_MODERATE"), 2)
         XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_EXPENSIVE"), 3)
         XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_VERY_EXPENSIVE"), 4)
-        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_UNSPECIFIED"), 1)
-        XCTAssertEqual(PlaceMapper.priceLevelInt(nil), 1)
+        // Unknown must stay unknown — never masquerade as "$".
+        XCTAssertNil(PlaceMapper.priceLevelInt("PRICE_LEVEL_UNSPECIFIED"))
+        XCTAssertNil(PlaceMapper.priceLevelInt(nil))
     }
 
     // MARK: - AppConfig field mask
@@ -294,11 +295,10 @@ final class CitisenTests: XCTestCase {
             "places.types",
             "places.regularOpeningHours",
             "places.currentOpeningHours",
+            "places.utcOffsetMinutes",
             "places.websiteUri",
             "places.nationalPhoneNumber",
             "places.internationalPhoneNumber",
-            "places.reviews",
-            "places.editorialSummary",
             "places.photos"
         ]
         for path in required {
@@ -306,6 +306,17 @@ final class CitisenTests: XCTestCase {
                 mask.contains(path),
                 "searchTextFieldMask is missing required field path: \(path)"
             )
+        }
+        // The bulk search mask must stay in the cheaper SKU: reviews and the
+        // editorial summary load lazily via Place Details on sheet open.
+        XCTAssertFalse(mask.contains("places.reviews"))
+        XCTAssertFalse(mask.contains("places.editorialSummary"))
+    }
+
+    func test_AppConfig_placeDetailsFieldMask_includesFullPayload() {
+        let mask = AppConfig.Endpoints.placeDetailsFieldMask
+        for path in ["reviews", "editorialSummary", "utcOffsetMinutes", "regularOpeningHours"] {
+            XCTAssertTrue(mask.contains(path), "placeDetailsFieldMask missing \(path)")
         }
     }
 }

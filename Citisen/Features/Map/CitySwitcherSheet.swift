@@ -12,6 +12,9 @@ struct CitySwitcherSheet: View {
         NavigationStack {
             List {
                 if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if cityService.isCityPinned {
+                        useMyLocationSection()
+                    }
                     recentsSection()
                 } else {
                     resultsSection()
@@ -31,6 +34,33 @@ struct CitySwitcherSheet: View {
                     Button("Done") { dismiss() }
                         .tint(BrandColor.sand)
                 }
+            }
+        }
+    }
+
+    /// Only shown while a city is pinned — clears the pin so the reverse-geocoded
+    /// city takes over again.
+    private func useMyLocationSection() -> some View {
+        Section {
+            Button {
+                cityService.unpinCity()
+                dismiss()
+            } label: {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "location.fill")
+                        .foregroundStyle(BrandColor.sand)
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use my location")
+                            .font(.headline17)
+                            .foregroundStyle(AppColor.textPrimary)
+                        Text("Follow the city you're actually in")
+                            .font(.caption12)
+                            .foregroundStyle(AppColor.textSecondary)
+                    }
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
         }
     }

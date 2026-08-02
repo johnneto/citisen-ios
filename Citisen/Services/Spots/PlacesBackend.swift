@@ -25,7 +25,16 @@ protocol PlacesBackend: AnyObject {
         forceRefresh: Bool
     ) -> AsyncThrowingStream<Place, Error>
 
-    func search(query: String, city: City) async -> [Place]
+    /// Resolves a Google place id picked from search autocomplete into a full
+    /// `Place`. `sessionToken` is the autocomplete session the suggestion came
+    /// from, so the details call is billed inside that session. `cityId` and
+    /// `mode` stamp the resulting `Place` for caching and pin styling.
+    func resolveSearchResult(
+        placeId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async -> Place?
 
     func resolvePlace(id: UUID) async -> Place?
 

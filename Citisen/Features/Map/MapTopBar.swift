@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MapTopBar: View {
     let cityName: String
+    /// User deliberately chose this city, so GPS won't move it. Shown as a pin glyph.
+    let isCityPinned: Bool
     let onTapHamburger: () -> Void
     let onTapCity: () -> Void
     let onTapSearch: () -> Void
@@ -22,6 +24,12 @@ struct MapTopBar: View {
 
             Button(action: onTapCity) {
                 HStack(spacing: 4) {
+                    if isCityPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(BrandColor.sand)
+                            .accessibilityHidden(true)
+                    }
                     Text(cityName)
                         .font(.headline17)
                         .foregroundStyle(AppColor.textPrimary)

@@ -107,8 +107,15 @@ final class AppRouter {
         presentedSheet = .poi
     }
 
+    /// The pager keys its `ForEach` and its `scrollPosition` on these ids, so a
+    /// repeat would make paging land on an ambiguous page. Callers pass lists
+    /// built from several sources (map, saved collections) — dedupe here rather
+    /// than trusting each one.
     private func normalizedPOIIds(_ placeId: UUID, in placeIds: [UUID]) -> [UUID] {
-        placeIds.contains(placeId) ? placeIds : [placeId] + placeIds
+        let unique = placeIds.reduce(into: (seen: Set<UUID>(), ids: [UUID]())) { acc, id in
+            if acc.seen.insert(id).inserted { acc.ids.append(id) }
+        }.ids
+        return unique.contains(placeId) ? unique : [placeId] + unique
     }
 
     func showToast(_ message: String) {

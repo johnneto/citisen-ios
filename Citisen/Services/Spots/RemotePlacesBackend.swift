@@ -169,7 +169,8 @@ final class RemotePlacesBackend: PlacesBackend {
     func cachedSpots(city: City, mode: TravelMode) -> [Place]? {
         let key = cacheKey(cityId: city.id, mode: mode)
         guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
-        return cached.places
+        // Lists cached before dedupe landed can still hold repeats.
+        return cached.places.uniquedById()
     }
 }
 
@@ -190,7 +191,7 @@ private extension RemotePlacesBackend {
            let cached = cache.loadEntry(key: key),
            !cached.places.isEmpty {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public) (stream)")
-            for place in cached.places {
+            for place in cached.places.uniquedById() {
                 continuation.yield(place)
             }
             return
@@ -209,7 +210,11 @@ private extension RemotePlacesBackend {
             throw SpotsError.aiUnavailable("Gemini returned no spots.")
         }
 
+        // Distinct curated names can resolve to the same Google place (aliases,
+        // a venue and its bar). `Place.id` is a v5 UUID over `googlePlaceId`, so
+        // keeping both would stack map pins and collide on every ForEach id.
         var resolved: [Place] = []
+        var seenIds = Set<UUID>()
         try await withThrowingTaskGroup(of: Place?.self) { group in
             let concurrency = AppConfig.Spots.placesConcurrency
             var iterator = curated.makeIterator()
@@ -227,7 +232,7 @@ private extension RemotePlacesBackend {
             while inFlight > 0 {
                 try Task.checkCancellation()
                 if let place = try await group.next() {
-                    if let place {
+                    if let place, seenIds.insert(place.id).inserted {
                         resolved.append(place)
                         cache.savePlace(place)
                         continuation.yield(place)
@@ -258,6 +263,7 @@ private extension RemotePlacesBackend {
     ) async throws -> [Place] {
         let concurrency = AppConfig.Spots.placesConcurrency
         var resolved: [Place] = []
+        var seenIds = Set<UUID>()
 
         try await withThrowingTaskGroup(of: Place?.self) { group in
             var iterator = curated.makeIterator()
@@ -275,7 +281,7 @@ private extension RemotePlacesBackend {
             while inFlight > 0 {
                 try Task.checkCancellation()
                 if let place = try await group.next() {
-                    if let place {
+                    if let place, seenIds.insert(place.id).inserted {
                         resolved.append(place)
                         cache.savePlace(place)
                     }

@@ -47,6 +47,7 @@ struct TravelModeToolbar: View {
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         #endif
+        router.dismissSheet()
         withAnimation(Self.selectionSpring) {
             prefs.activeModeIndex = index
         }

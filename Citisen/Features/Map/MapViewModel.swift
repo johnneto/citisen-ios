@@ -18,12 +18,23 @@ final class MapViewModel {
     }
 
     var cameraPosition: MapCameraPosition
-    var activeSubFilters: Set<SubFilter> = []
+    var activeSubFilters: Set<SubFilter> = [] {
+        didSet {
+            guard activeSubFilters != oldValue else { return }
+            rebuildFilteredPlaces()
+        }
+    }
     var shouldShowLocationDeniedSettings: Bool = false
 
     /// Everything the map renders: the curated list plus the searched places the
     /// user kept for this city + mode.
     private(set) var places: [Place] = []
+    /// `places` after the sub-filters, cached rather than recomputed on demand.
+    /// The `Map` content closure is re-evaluated continuously while the camera
+    /// binding streams during a pinch, so re-filtering (and re-allocating the id
+    /// list) per pass showed up as stutter mid-gesture.
+    private(set) var filteredPlaces: [Place] = []
+    private(set) var filteredPlaceIds: [UUID] = []
     /// Curated spots only. `phase` is derived from this alone, so a city with
     /// kept places but no AI list still shows the "Discover <City>" CTA.
     private var curatedPlaces: [Place] = []
@@ -67,10 +78,11 @@ final class MapViewModel {
         ))
     }
 
-    func filteredPlaces() -> [Place] {
-        places.filter { place in
+    private func rebuildFilteredPlaces() {
+        filteredPlaces = places.filter { place in
             activeSubFilters.allSatisfy { $0.matches(place) }
         }
+        filteredPlaceIds = filteredPlaces.map(\.id)
     }
 
     /// Recomputes the rendered list from the curated spots plus the kept ones.
@@ -83,6 +95,7 @@ final class MapViewModel {
         // Curated first, so a spot the AI also suggested keeps its ranked slot
         // and its curated rationale rather than the kept copy.
         places = (curatedPlaces + kept).uniquedById()
+        rebuildFilteredPlaces()
     }
 
     /// Called when the user keeps a searched place, so its pin becomes permanent

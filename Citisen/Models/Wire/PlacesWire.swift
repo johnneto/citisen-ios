@@ -58,6 +58,7 @@ struct PlaceV1: Decodable {
     let photos: [PhotoV1]?
     let addressComponents: [AddressComponentV1]?
     let businessStatus: String?
+    let utcOffsetMinutes: Int?
 }
 
 struct AddressComponentV1: Decodable {
@@ -71,8 +72,25 @@ struct AddressComponentV1: Decodable {
 struct AutocompleteRequest: Encodable {
     let input: String
     let sessionToken: String
+    let locationBias: SearchTextRequest.LocationBias?
     let includedPrimaryTypes: [String]?
     let languageCode: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case input, sessionToken, locationBias, includedPrimaryTypes, languageCode
+    }
+
+    // Hand-written so nil fields are omitted rather than sent as `null` — the
+    // synthesized encoder emits explicit nulls, and Places rejects a null
+    // `locationBias`. Mirrors `SearchTextRequest.encode(to:)`.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(input, forKey: .input)
+        try container.encode(sessionToken, forKey: .sessionToken)
+        try container.encodeIfPresent(locationBias, forKey: .locationBias)
+        try container.encodeIfPresent(includedPrimaryTypes, forKey: .includedPrimaryTypes)
+        try container.encodeIfPresent(languageCode, forKey: .languageCode)
+    }
 }
 
 struct AutocompleteResponse: Decodable {
@@ -119,6 +137,18 @@ struct LatLngV1: Codable {
 struct OpeningHoursV1: Decodable {
     let openNow: Bool?
     let weekdayDescriptions: [String]?
+    let periods: [PeriodV1]?
+
+    struct PeriodV1: Decodable {
+        let open: PointV1?
+        let close: PointV1?   // absent close on a lone period = open 24/7
+
+        struct PointV1: Decodable {
+            let day: Int?     // 0 = Sunday … 6 = Saturday
+            let hour: Int?
+            let minute: Int?
+        }
+    }
 }
 
 struct ReviewV1: Decodable {

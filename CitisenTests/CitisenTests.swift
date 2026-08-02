@@ -96,8 +96,9 @@ final class CitisenTests: XCTestCase {
         XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_MODERATE"), 2)
         XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_EXPENSIVE"), 3)
         XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_VERY_EXPENSIVE"), 4)
-        XCTAssertEqual(PlaceMapper.priceLevelInt("PRICE_LEVEL_UNSPECIFIED"), 1)
-        XCTAssertEqual(PlaceMapper.priceLevelInt(nil), 1)
+        // Unknown must stay unknown — never masquerade as "$".
+        XCTAssertNil(PlaceMapper.priceLevelInt("PRICE_LEVEL_UNSPECIFIED"))
+        XCTAssertNil(PlaceMapper.priceLevelInt(nil))
     }
 
     // MARK: - AppConfig field mask
@@ -114,6 +115,173 @@ final class CitisenTests: XCTestCase {
         XCTAssertNil(TabBarLayout.slotIndex(forOrderIndex: 5))
     }
 
+    // MARK: - AutocompleteRequest encoding
+
+    private func encodedKeys(_ request: AutocompleteRequest) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(request)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    func test_AutocompleteRequest_omitsNilFields() throws {
+        let request = AutocompleteRequest(
+            input: "caf",
+            sessionToken: "token-1",
+            locationBias: nil,
+            includedPrimaryTypes: nil,
+            languageCode: nil
+        )
+        let object = try encodedKeys(request)
+        XCTAssertEqual(object["input"] as? String, "caf")
+        XCTAssertEqual(object["sessionToken"] as? String, "token-1")
+        // Places rejects explicit nulls — the hand-written encoder must drop them.
+        XCTAssertNil(object["locationBias"])
+        XCTAssertNil(object["includedPrimaryTypes"])
+        XCTAssertNil(object["languageCode"])
+    }
+
+    func test_AutocompleteRequest_encodesLocationBiasCircle() throws {
+        let request = AutocompleteRequest(
+            input: "caf",
+            sessionToken: "token-1",
+            locationBias: SearchTextRequest.LocationBias(
+                circle: .init(
+                    center: LatLngV1(latitude: 59.437, longitude: 24.7536),
+                    radius: 30_000
+                )
+            ),
+            includedPrimaryTypes: ["locality"],
+            languageCode: "en"
+        )
+        let object = try encodedKeys(request)
+        let bias = try XCTUnwrap(object["locationBias"] as? [String: Any])
+        let circle = try XCTUnwrap(bias["circle"] as? [String: Any])
+        let center = try XCTUnwrap(circle["center"] as? [String: Any])
+        XCTAssertEqual(center["latitude"] as? Double, 59.437)
+        XCTAssertEqual(center["longitude"] as? Double, 24.7536)
+        XCTAssertEqual(circle["radius"] as? Double, 30_000)
+        XCTAssertEqual(object["includedPrimaryTypes"] as? [String], ["locality"])
+        XCTAssertEqual(object["languageCode"] as? String, "en")
+    }
+
+    // MARK: - SearchSuggestion
+
+    private func suggestion(placeId: String?, types: [String]) throws -> AutocompleteSuggestion {
+        let idField = placeId.map { "\"placeId\": \"\($0)\"," } ?? ""
+        let typeList = types.map { "\"\($0)\"" }.joined(separator: ", ")
+        let json = """
+        {
+          "placePrediction": {
+            \(idField)
+            "text": { "text": "Full text" },
+            "structuredFormat": {
+              "mainText": { "text": "Main" },
+              "secondaryText": { "text": "Secondary" }
+            },
+            "types": [\(typeList)]
+          }
+        }
+        """
+        return try JSONDecoder().decode(AutocompleteSuggestion.self, from: Data(json.utf8))
+    }
+
+    func test_SearchSuggestion_classifiesLocalityAsCity() throws {
+        let parsed = try XCTUnwrap(
+            SearchSuggestion(from: suggestion(placeId: "ChIJ_city", types: ["locality", "political"]))
+        )
+        XCTAssertEqual(parsed.kind, .city)
+        XCTAssertEqual(parsed.iconSymbol, "globe.europe.africa")
+        XCTAssertEqual(parsed.primaryText, "Main")
+        XCTAssertEqual(parsed.secondaryText, "Secondary")
+    }
+
+    func test_SearchSuggestion_classifiesEstablishmentAsPlace() throws {
+        let parsed = try XCTUnwrap(
+            SearchSuggestion(from: suggestion(placeId: "ChIJ_spot", types: ["restaurant", "establishment"]))
+        )
+        XCTAssertEqual(parsed.kind, .place)
+        XCTAssertEqual(parsed.iconSymbol, "fork.knife")
+    }
+
+    func test_SearchSuggestion_fallsBackToGenericPinForUnknownType() throws {
+        let parsed = try XCTUnwrap(
+            SearchSuggestion(from: suggestion(placeId: "ChIJ_x", types: ["point_of_interest"]))
+        )
+        XCTAssertEqual(parsed.kind, .place)
+        XCTAssertEqual(parsed.iconSymbol, "mappin.circle")
+    }
+
+    func test_SearchSuggestion_returnsNilWithoutPlaceId() throws {
+        XCTAssertNil(SearchSuggestion(from: try suggestion(placeId: nil, types: ["locality"])))
+    }
+
+    // MARK: - CityService pinning
+
+    @MainActor
+    private func makeCityService() throws -> (CityService, UserPreferencesService) {
+        let suiteName = "citisen.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let prefs = UserPreferencesService(defaults: defaults)
+        return (CityService(prefs: prefs), prefs)
+    }
+
+    private func makeCity(name: String, countryCode: String) -> City {
+        City(
+            id: City.stableId(name: name, countryCode: countryCode),
+            name: name,
+            country: countryCode,
+            emojiFlag: "",
+            center: Coordinate(latitude: 0, longitude: 0),
+            defaultSpanKm: 8,
+            countryCode: countryCode
+        )
+    }
+
+    @MainActor
+    func test_CityService_pinnedCityOutranksGeocodedCity() throws {
+        let (service, prefs) = try makeCityService()
+        let geocoded = makeCity(name: "Tallinn", countryCode: "EE")
+        prefs.lastDynamicCity = geocoded
+        let pinned = makeCity(name: "Porto", countryCode: "PT")
+
+        service.setActiveCity(pinned)
+
+        XCTAssertTrue(service.isCityPinned)
+        XCTAssertEqual(service.activeCity.id, pinned.id)
+    }
+
+    @MainActor
+    func test_CityService_unpinRestoresGeocodedCity() throws {
+        let (service, _) = try makeCityService()
+        let pinned = makeCity(name: "Porto", countryCode: "PT")
+        service.setActiveCity(pinned)
+        let epochBefore = service.citySelectionEpoch
+
+        service.unpinCity()
+
+        XCTAssertFalse(service.isCityPinned)
+        // No geocoded city yet, so the pick survives as the most recent city —
+        // but the pin is gone, so the next GPS fix is free to take over.
+        XCTAssertEqual(service.citySelectionEpoch, epochBefore)
+    }
+
+    @MainActor
+    func test_CityService_pinSurvivesRelaunch() throws {
+        let suiteName = "citisen.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let firstPrefs = UserPreferencesService(defaults: defaults)
+        firstPrefs.lastDynamicCity = makeCity(name: "Tallinn", countryCode: "EE")
+        let pinned = makeCity(name: "Porto", countryCode: "PT")
+        CityService(prefs: firstPrefs).setActiveCity(pinned)
+
+        // Cold start: a fresh prefs + service reading the same defaults.
+        let relaunched = CityService(prefs: UserPreferencesService(defaults: defaults))
+        XCTAssertTrue(relaunched.isCityPinned)
+        XCTAssertEqual(relaunched.activeCity.id, pinned.id)
+    }
+
     func test_AppConfig_searchTextFieldMask_containsAllFieldsRead() {
         let mask = AppConfig.Endpoints.searchTextFieldMask
         let required = [
@@ -127,11 +295,10 @@ final class CitisenTests: XCTestCase {
             "places.types",
             "places.regularOpeningHours",
             "places.currentOpeningHours",
+            "places.utcOffsetMinutes",
             "places.websiteUri",
             "places.nationalPhoneNumber",
             "places.internationalPhoneNumber",
-            "places.reviews",
-            "places.editorialSummary",
             "places.photos"
         ]
         for path in required {
@@ -139,6 +306,17 @@ final class CitisenTests: XCTestCase {
                 mask.contains(path),
                 "searchTextFieldMask is missing required field path: \(path)"
             )
+        }
+        // The bulk search mask must stay in the cheaper SKU: reviews and the
+        // editorial summary load lazily via Place Details on sheet open.
+        XCTAssertFalse(mask.contains("places.reviews"))
+        XCTAssertFalse(mask.contains("places.editorialSummary"))
+    }
+
+    func test_AppConfig_placeDetailsFieldMask_includesFullPayload() {
+        let mask = AppConfig.Endpoints.placeDetailsFieldMask
+        for path in ["reviews", "editorialSummary", "utcOffsetMinutes", "regularOpeningHours"] {
+            XCTAssertTrue(mask.contains(path), "placeDetailsFieldMask missing \(path)")
         }
     }
 }

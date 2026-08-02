@@ -34,7 +34,7 @@ final class GeminiClient {
                 responseMimeType: "application/json",
                 responseSchema: .curatedSpotsArray,
                 temperature: 0.7,
-                maxOutputTokens: 4096,
+                maxOutputTokens: 8192,
                 thinkingConfig: GeminiThinkingConfig(thinkingBudget: 0)
             )
         )
@@ -73,53 +73,48 @@ final class GeminiClient {
         }
     }
 
-    private func buildPrompt(
+    func buildPrompt(
         city: City,
         mode: TravelMode,
         minCount: Int,
         maxCount: Int
     ) -> String {
-        let constraints = [
-            "avoid common global chains unless regional",
-            "prefer places locals actually use",
-            "spread results across distinct neighborhoods — do not cluster near one point",
-            "do not show duplicates",
-            "exclude global chains",
-            "order the response by relevance with most relevant suggestions first on the list"
-        ].joined(separator: ", ")
-
-        let primaryTypeGuidance = """
-        For each spot, also set "primaryType" to the single Google Places (New) primary type \
-        string that best matches the venue. Use the exact snake_case identifier (no display \
-        formatting). Examples of valid values: restaurant, cafe, bar, bakery, night_club, \
-        church, mosque, synagogue, hindu_temple, place_of_worship, museum, art_gallery, \
-        library, historical_landmark, tourist_attraction, monument, park, garden, beach, zoo, \
-        aquarium, book_store, shopping_mall, clothing_store, market, hotel, lodging, gym, spa, \
-        yoga_studio, theater, movie_theater, stadium, concert_hall, amusement_park, viewpoint. \
-        If unsure, omit primaryType rather than guess — a wrong value will filter out the \
-        correct place.
         """
+        You are a discerning local travel curator for \(city.name), \(city.country).
 
-        let scope = """
-        Suggest between \(minCount) and \(maxCount) \(mode.displayName) highlights across the \
-        entire city of \(city.name) — cover the whole city perimeter (historic core, residential \
-        pockets, emerging areas, outskirts worth the trip), not just one area.
-        """
+        TASK
+        Suggest between \(minCount) and \(maxCount) \(mode.displayName) spots for a visitor, \
+        covering the whole city — historic core, residential neighborhoods, emerging areas, \
+        and outskirts worth the trip. This is a curated city-wide shortlist of standouts \
+        (nearby, radius-based coverage is handled by a separate system). Order by relevance, \
+        most essential first.
 
-        let framing = """
-        Treat this as a curated city-wide shortlist of standouts; nearby and radius-based \
-        coverage is handled separately by another system, so focus on the very best of the \
-        city as a whole rather than what is closest to any single point.
-        """
-
-        return """
-        Target city: \(city.name), \(city.country).
-        You are a local travel guide for \(city.name), \(city.country).
-        \(scope)
-        \(framing)
+        MODE FOCUS
         \(mode.promptInstructions)
-        HARD CONSTRAINTS: \(constraints).
-        \(primaryTypeGuidance)
+
+        NAMING — CRITICAL
+        - "name" must be the venue's official name EXACTLY as it appears on its public Google \
+        Maps listing, in the local language and spelling (e.g. "Mosteiro dos Jerónimos", not \
+        "Jeronimos Monastery"; "Café A Brasileira", not "A Brasileira Cafe").
+        - Never translate, transliterate, shorten, or add descriptive words to the name.
+        - Each entry must be one concrete venue or landmark with its own Google Maps listing — \
+        no districts, streets, events, or vague areas (a named market hall or park is fine).
+        - If several venues share a similar name, pick the flagship or original location and \
+        set "neighborhood" to disambiguate.
+
+        SELECTION RULES
+        - Exclude global chains (e.g. Starbucks, McDonald's). Local or regional chains are \
+        allowed only when they are genuinely part of local culture.
+        - Prefer places locals actually use and rate highly; skip tourist traps that survive \
+        on location alone.
+        - No duplicates. Spread picks across distinct neighborhoods — do not cluster near one point.
+
+        OUTPUT FIELDS
+        - "neighborhood": short district name.
+        - "rationale": one sentence, maximum 15 words, on why it is worth a visit.
+        - "primaryType": the venue's Google Places primary type. Choose ONLY from this list: \
+        \(mode.typePalette.joined(separator: ", ")). If none fits, omit the field — a wrong \
+        type hides the venue.
         """
     }
 

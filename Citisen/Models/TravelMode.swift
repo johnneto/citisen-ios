@@ -96,59 +96,93 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
         switch self {
         case .standard:
             return """
-            Curate a balanced sampler of the area, priotizing interesting places for someone visiting the city. \
-            Skip places that are famous for being a tourist trap and hotels.
+            Curate a balanced sampler of the city's best, prioritizing what is interesting for a \
+            first-time visitor: signature landmarks, food, viewpoints, culture and local life. \
+            Skip hotels and places famous mainly for being tourist traps.
             """
         case .food:
             return """
-            Focus on independently owned restaurants beloved by residents. \
-            Mix price tiers, include at least 5 regional specialties, \
-            casual daytime spots, dinner spots. \
-            Always prioritize places that offer regional food or \
-            interesting dishes that are special to the city or country. \
-            Exclude hotels.
+            Independently owned restaurants residents love. Mix price tiers; include at least \
+            5 venues serving regional specialties, plus casual daytime spots and dinner spots. \
+            Always prioritize kitchens serving dishes special to the city or country. \
+            Exclude hotels and hotel restaurants.
             """
         case .nature:
             return """
-            Parks, famous trails, urban gardens, riverside walks, viewpoints, \
-            quiet green pockets. Prioritize sites that are special to the city or country.
+            Parks, urban gardens, riverside or coastal walks, viewpoints, famous trails, \
+            and quiet green pockets. Prioritize landscapes special to the city or country.
             """
         case .turbo:
             return """
-            Pick only spots that are a must-see and essential for tourists when quickly visiting the region, \
-            like iconic buildings, statues, museums, famous landmarks, parks and any place that is most relevant \
-            considering a short trip. \
-            Skip hotels unless important for visiting, generic suggestions or \
-            places that are not essential to see for visitors.
+            Only must-see essentials for a short visit: iconic buildings, landmark squares, \
+            statues, flagship museums, famous viewpoints. Skip anything a rushed visitor could \
+            safely miss; skip hotels unless the building itself is a landmark.
             """
         case .history:
             return """
-            Pick spots linked to hitorical facts like conflicts, famous figures, \
-            neighbourhoods with preserved character, architecture highlights, museums and plaques. \
-            Include at least 3 less known but curious spots using Atlas Obscura.
+            Spots tied to historical events, conflicts, famous figures, preserved neighborhoods, \
+            architecture highlights, museums and memorials. Include at least 3 lesser-known \
+            historical curiosities — obscure relics, oddities, or forgotten sites that reward a detour.
             """
         case .sports:
             return """
-            Suggest nice-to-see spots for travelers that like sports. \
-            Unique or famous spots, like historical sites related to sports or sports figures, \
-            stadiums and active venues locals actually use. Prioritize sites that are special to the city or country.
+            Spots for travelers who love sports: legendary stadiums and arenas, historic sites \
+            tied to sports or athletes, and active venues locals actually use. \
+            Prioritize venues special to the city or country.
             """
         case .nightlife:
             return """
-            Bars, karaoke rooms, late-night clubs and venues \
-            that have great reputation. Prioritize sites that are special to the city or country.
+            Bars, cocktail dens, live-music venues, karaoke rooms, and late-night clubs with \
+            strong local reputations. Prioritize venues special to the city or country over \
+            generic party spots.
             """
         case .cafes:
             return """
-            Independent specialty coffee, neighborhood cafes, quiet study rooms, \
-            slow breakfast spots. Skip chains and lobby cafés unless specially relevant for tourism or local culture.
+            Independent specialty coffee, beloved neighborhood cafés, quiet rooms good for \
+            reading, and slow breakfast spots. Skip chains and hotel lobby cafés unless they \
+            are a genuine local institution.
             """
         case .art:
             return """
-            Galleries, artist-run studios, public murals, design shops, \
-            and museums. Mix established institutions with at least two \
-            emerging or off-the-main-drag spaces. Prioritize sites that are special to the city or country.
+            Galleries, artist-run studios, public murals and street-art spots, design shops, \
+            and art museums. Mix established institutions with at least two emerging or \
+            off-the-main-drag spaces. Prioritize scenes special to the city or country.
             """
+        }
+    }
+
+    /// Google Places (New) Table A primary types Gemini may emit for this mode.
+    /// The hint is sent with `strictTypeFiltering: true`, so every value here must be a
+    /// valid Table A type — an invalid or wrong hint hides the correct place.
+    var typePalette: [String] {
+        switch self {
+        case .standard:
+            return [
+                "tourist_attraction", "historical_landmark", "monument", "museum",
+                "art_gallery", "park", "market", "church", "restaurant", "cafe"
+            ]
+        case .food:
+            return ["restaurant", "bakery", "market", "cafe", "bar"]
+        case .nature:
+            return ["park", "garden", "botanical_garden", "beach", "hiking_area", "national_park"]
+        case .turbo:
+            return [
+                "tourist_attraction", "historical_landmark", "monument", "museum",
+                "church", "park", "plaza"
+            ]
+        case .history:
+            return [
+                "historical_landmark", "monument", "museum", "church",
+                "place_of_worship", "cemetery"
+            ]
+        case .sports:
+            return ["stadium", "arena", "sports_complex", "gym", "park", "historical_landmark"]
+        case .nightlife:
+            return ["bar", "night_club", "karaoke"]
+        case .cafes:
+            return ["cafe", "coffee_shop", "bakery", "tea_house"]
+        case .art:
+            return ["art_gallery", "museum", "art_studio", "performing_arts_theater", "cultural_center"]
         }
     }
 }

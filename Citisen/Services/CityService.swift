@@ -25,7 +25,19 @@ final class CityService {
         self.dynamicCity = prefs.lastDynamicCity
     }
 
+    /// True when the user has deliberately picked a city, which then outranks the
+    /// reverse-geocoded `dynamicCity`.
+    var isCityPinned: Bool {
+        prefs.cityPinned
+    }
+
     var activeCity: City {
+        // A deliberate pick wins over GPS — otherwise the next reverse-geocode
+        // silently drags the trip back to wherever the phone physically is.
+        if prefs.cityPinned,
+           let pinned = prefs.recentCities.first(where: { $0.id == prefs.activeCityId }) {
+            return pinned
+        }
         if let dynamicCity { return dynamicCity }
         if let active = prefs.recentCities.first(where: { $0.id == prefs.activeCityId }) {
             return active
@@ -40,14 +52,29 @@ final class CityService {
         prefs.recentCities
     }
 
-    /// User picked a city from the switcher (recent or search result). Records it
-    /// in recents and bumps the selection epoch. The welcome animation is driven
-    /// separately by `MapViewModel` which has access to `lastSessionCityId`.
+    /// User picked a city from the switcher or from search. Records it in recents,
+    /// pins it against GPS, and bumps the selection epoch. The welcome animation is
+    /// driven separately by `MapScreen`, which has access to `lastSessionCityId`.
+    ///
+    /// `dynamicCity` is deliberately left populated — it still tracks the real
+    /// device location, it just loses the precedence contest while pinned, so
+    /// `unpinCity()` can restore it instantly.
     func setActiveCity(_ city: City) {
-        dynamicCity = nil
         prefs.activeCityId = city.id
+        // Must precede the pin so `activeCity`'s recents lookup can resolve it.
         recordRecent(city)
+        prefs.cityPinned = true
         citySelectionEpoch &+= 1
+    }
+
+    /// Drops the manual pin and hands control back to the reverse-geocoded city.
+    func unpinCity() {
+        guard prefs.cityPinned else { return }
+        let previousId = activeCity.id
+        prefs.cityPinned = false
+        if activeCity.id != previousId {
+            citySelectionEpoch &+= 1
+        }
     }
 
     /// Inserts the city at the front of `recentCities`, de-duped by id, capped at
@@ -118,7 +145,10 @@ final class CityService {
             let previousId = dynamicCity?.id
             self.dynamicCity = resolved
             prefs.lastDynamicCity = resolved
-            if previousId != resolved.id {
+            // While pinned the active city is unchanged, so bumping the epoch would
+            // fire `handleCityChange()` and yank the camera back off the user right
+            // after they tapped Near Me.
+            if previousId != resolved.id, !prefs.cityPinned {
                 citySelectionEpoch &+= 1
             }
         } catch is CancellationError {

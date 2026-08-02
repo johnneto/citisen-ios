@@ -74,12 +74,14 @@ private struct PlacesListRow: View {
 
                 HStack(spacing: 6) {
                     Text(place.formattedDistance(from: originCenter))
-                    Text("·").foregroundStyle(AppColor.textTertiary)
-                    HStack(spacing: 2) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(AppColor.warning)
-                        Text(String(format: "%.1f", place.rating))
+                    if let rating = place.rating {
+                        Text("·").foregroundStyle(AppColor.textTertiary)
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(AppColor.warning)
+                            Text(String(format: "%.1f", rating))
+                        }
                     }
                     Text("·").foregroundStyle(AppColor.textTertiary)
                     Text(place.category)

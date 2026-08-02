@@ -10,6 +10,7 @@ import Foundation
 enum CacheMigrator {
     static func runIfNeeded(prefs: UserPreferencesService) {
         runListCachePhotoBump(prefs: prefs)
+        runDetailsV3Bump(prefs: prefs)
         guard !prefs.spotsCacheMigratedV2 else { return }
         defer { prefs.spotsCacheMigratedV2 = true }
 
@@ -95,6 +96,26 @@ enum CacheMigrator {
             includingPropertiesForKeys: nil
         )) ?? []
         for url in contents where url.lastPathComponent.hasPrefix("list_") {
+            try? fileManager.removeItem(at: url)
+        }
+    }
+
+    /// One-shot wipe of both `list_*` and `place_*` caches after the details
+    /// pipeline rework: cached places written before it lack structured opening
+    /// periods and `utcOffsetMinutes`, so they would show "hours unknown" for up
+    /// to the 30-day TTL. Wiping forces an immediate re-resolve with the new mask.
+    private static func runDetailsV3Bump(prefs: UserPreferencesService) {
+        guard !prefs.spotsCacheClearedForDetailsV3 else { return }
+        defer { prefs.spotsCacheClearedForDetailsV3 = true }
+
+        let directory = spotsDirectory()
+        let fileManager = FileManager.default
+        let contents = (try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for url in contents
+        where url.lastPathComponent.hasPrefix("list_") || url.lastPathComponent.hasPrefix("place_") {
             try? fileManager.removeItem(at: url)
         }
     }

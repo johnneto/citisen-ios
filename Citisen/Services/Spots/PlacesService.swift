@@ -55,10 +55,22 @@ final class PlacesService {
         }
     }
 
-    func search(query: String, city: City) async -> [Place] {
-        let results = await backend.search(query: query, city: city)
-        ingest(results)
-        return results
+    /// Resolves a search-autocomplete suggestion into a full `Place` and ingests
+    /// it, so the POI sheet finds it in `snapshot` without a second round-trip.
+    func resolveSearchResult(
+        placeId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async -> Place? {
+        guard let place = await backend.resolveSearchResult(
+            placeId: placeId,
+            sessionToken: sessionToken,
+            cityId: cityId,
+            mode: mode
+        ) else { return nil }
+        snapshot[place.id] = place
+        return place
     }
 
     func place(id: UUID) -> Place? {
@@ -91,6 +103,17 @@ final class PlacesService {
             snapshot[id] = place
         }
         return result
+    }
+
+    /// Lazily upgrades a cheap-mask place to the full Place Details payload
+    /// (reviews, editorial summary) when the POI sheet opens it. Returns the
+    /// enriched place, or the original when it is already enriched or the
+    /// fetch fails.
+    func enrichPlace(_ place: Place) async -> Place {
+        guard place.detailsFetchedAt == nil else { return place }
+        guard let enriched = await backend.enrichPlace(place) else { return place }
+        snapshot[enriched.id] = enriched
+        return enriched
     }
 
     func clearCache(forCityId cityId: String) {

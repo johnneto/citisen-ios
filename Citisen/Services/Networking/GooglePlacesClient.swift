@@ -11,12 +11,16 @@ final class GooglePlacesClient {
         self.keychain = keychain
     }
 
-    func searchText(
+    /// Text Search (New). Returns up to `maxResults` candidates in Google's
+    /// ranking order so the caller can pick the official listing among dupes.
+    /// Billing is per request, not per result, so asking for 5 costs the same as 1.
+    func searchTextCandidates(
         query: String,
         near center: CLLocationCoordinate2D,
         radius: Double = 5_000,
-        includedType: String? = nil
-    ) async throws -> PlaceV1? {
+        includedType: String? = nil,
+        maxResults: Int = 5
+    ) async throws -> [PlaceV1] {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
         guard let url = URL(string: AppConfig.Endpoints.placesSearchText) else {
@@ -31,7 +35,7 @@ final class GooglePlacesClient {
                     radius: radius
                 )
             ),
-            maxResultCount: 1,
+            maxResultCount: maxResults,
             includedType: includedType,
             strictTypeFiltering: includedType == nil ? nil : true
         )
@@ -45,13 +49,21 @@ final class GooglePlacesClient {
         request.httpBody = try JSONEncoder().encode(payload)
 
         let response: SearchTextResponse = try await http.send(request)
-        return response.places?.first
+        return response.places ?? []
     }
 
-    func placeDetails(id placeId: String) async throws -> PlaceV1? {
+    /// Fetches full place details. Pass the `sessionToken` from a preceding
+    /// autocomplete run so Google bills both calls as one session.
+    func placeDetails(id placeId: String, sessionToken: String? = nil) async throws -> PlaceV1? {
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
 
-        guard let url = URL(string: "\(AppConfig.Endpoints.placesDetailsBase)/\(placeId)") else {
+        guard var components = URLComponents(string: "\(AppConfig.Endpoints.placesDetailsBase)/\(placeId)") else {
+            throw SpotsError.placesUnauthorized(detail: nil)
+        }
+        if let sessionToken {
+            components.queryItems = [URLQueryItem(name: "sessionToken", value: sessionToken)]
+        }
+        guard let url = components.url else {
             throw SpotsError.placesUnauthorized(detail: nil)
         }
 
@@ -65,15 +77,21 @@ final class GooglePlacesClient {
         return place
     }
 
-    /// Autocomplete restricted to cities/towns. The session token should remain
-    /// stable across keystrokes for a given typing session and be reused for the
-    /// follow-up `cityDetails(placeId:sessionToken:)` call to be billed as one
-    /// autocomplete session (per Google's docs).
-    func autocompleteCities(
+    /// Places Autocomplete (New). The session token should remain stable across
+    /// keystrokes for a given typing session and be reused for the follow-up
+    /// details call so the whole thing is billed as one autocomplete session
+    /// (per Google's docs). Autocomplete takes no field mask.
+    ///
+    /// `center` applies a `locationBias` circle — results near it rank higher but
+    /// matches outside the radius are still returned.
+    func autocomplete(
         query: String,
         sessionToken: String,
+        near center: CLLocationCoordinate2D? = nil,
+        radius: Double = AppConfig.Search.locationBiasRadiusMeters,
+        includedPrimaryTypes: [String]? = nil,
         languageCode: String? = nil
-    ) async throws -> [CityPrediction] {
+    ) async throws -> [AutocompleteSuggestion] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         let key = try keychain.requireString(AppConfig.Secrets.googlePlacesKey)
@@ -81,10 +99,20 @@ final class GooglePlacesClient {
             throw SpotsError.placesUnauthorized(detail: nil)
         }
 
+        let bias = center.map { coord in
+            SearchTextRequest.LocationBias(
+                circle: .init(
+                    center: LatLngV1(latitude: coord.latitude, longitude: coord.longitude),
+                    radius: radius
+                )
+            )
+        }
+
         let payload = AutocompleteRequest(
             input: trimmed,
             sessionToken: sessionToken,
-            includedPrimaryTypes: ["locality", "administrative_area_level_3"],
+            locationBias: bias,
+            includedPrimaryTypes: includedPrimaryTypes,
             languageCode: languageCode
         )
 
@@ -96,7 +124,21 @@ final class GooglePlacesClient {
         request.httpBody = try JSONEncoder().encode(payload)
 
         let response: AutocompleteResponse = try await http.send(request)
-        let suggestions = response.suggestions ?? []
+        return response.suggestions ?? []
+    }
+
+    /// Autocomplete restricted to cities/towns, projected for the city switcher.
+    func autocompleteCities(
+        query: String,
+        sessionToken: String,
+        languageCode: String? = nil
+    ) async throws -> [CityPrediction] {
+        let suggestions = try await autocomplete(
+            query: query,
+            sessionToken: sessionToken,
+            includedPrimaryTypes: ["locality", "administrative_area_level_3"],
+            languageCode: languageCode
+        )
         return suggestions.compactMap { CityPrediction(from: $0) }
     }
 

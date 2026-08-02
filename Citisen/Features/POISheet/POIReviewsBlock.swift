@@ -8,7 +8,10 @@ struct POIReviewsBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Reviews")
+                // "Recent reviews" + rendered count so the number always matches
+                // the rows below (place.reviewCount is Google's total ratings,
+                // which includes text-less ratings we don't render).
+                Text(place.reviews.isEmpty ? "Reviews" : "Recent reviews (\(place.reviews.count))")
                     .font(.headline17)
                     .foregroundStyle(AppColor.textPrimary)
                 Spacer()
@@ -26,6 +29,13 @@ struct POIReviewsBlock: View {
                 }
             }
 
+            if place.reviews.isEmpty {
+                Text("No written reviews yet.")
+                    .font(.subheadline15)
+                    .foregroundStyle(AppColor.textTertiary)
+                    .padding(.vertical, 6)
+            }
+
             ForEach(place.reviews) { review in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
@@ -33,7 +43,7 @@ struct POIReviewsBlock: View {
                         Text(review.authorName)
                             .font(.footnote13.weight(.semibold))
                             .foregroundStyle(AppColor.textPrimary)
-                        Text("· \(review.daysAgo)d ago")
+                        Text("· \(review.relativeTime ?? "\(review.daysAgo)d ago")")
                             .font(.caption12)
                             .foregroundStyle(AppColor.textTertiary)
                         Spacer()
@@ -54,10 +64,12 @@ struct POIReviewsBlock: View {
                 Divider().background(AppColor.dividerSoft)
             }
 
-            Button(action: onSeeAll) {
-                Text("See all reviews")
-                    .font(.subheadline15.weight(.medium))
-                    .foregroundStyle(BrandColor.sand)
+            if !place.reviews.isEmpty {
+                Button(action: onSeeAll) {
+                    Text("See all reviews")
+                        .font(.subheadline15.weight(.medium))
+                        .foregroundStyle(BrandColor.sand)
+                }
             }
         }
     }

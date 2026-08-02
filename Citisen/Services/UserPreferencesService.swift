@@ -17,8 +17,10 @@ final class UserPreferencesService {
         static let lastSessionCityId = "citisen.lastSessionCityId"
         static let lastDynamicCity = "citisen.lastDynamicCity"
         static let recentCities = "citisen.recentCities"
+        static let cityPinned = "citisen.cityPinned"
         static let spotsCacheMigratedV2 = "citisen.spotsCacheMigratedV2"
         static let spotsListCacheClearedForPhotos10 = "citisen.spotsListCacheClearedForPhotos10"
+        static let spotsCacheClearedForDetailsV3 = "citisen.spotsCacheClearedForDetailsV3"
     }
 
     static let maxRecentCities = 10
@@ -110,6 +112,14 @@ final class UserPreferencesService {
         }
     }
 
+    /// True once the user has deliberately chosen a city. While set, `activeCityId`
+    /// outranks the reverse-geocoded `lastDynamicCity` in `CityService.activeCity`,
+    /// so a GPS fix can't silently drag the trip back to where the phone is.
+    /// Cleared by "Use my location" in the city switcher.
+    var cityPinned: Bool {
+        didSet { defaults.set(cityPinned, forKey: Keys.cityPinned) }
+    }
+
     /// One-shot flag for the legacy on-disk cache migration (hardcoded ids → `dyn_` ids).
     var spotsCacheMigratedV2: Bool {
         didSet { defaults.set(spotsCacheMigratedV2, forKey: Keys.spotsCacheMigratedV2) }
@@ -120,6 +130,13 @@ final class UserPreferencesService {
     /// without waiting 30 days for the natural TTL to expire.
     var spotsListCacheClearedForPhotos10: Bool {
         didSet { defaults.set(spotsListCacheClearedForPhotos10, forKey: Keys.spotsListCacheClearedForPhotos10) }
+    }
+
+    /// One-shot flag: wipes both `list_*` and `place_*` spot caches once after
+    /// the details-pipeline rework so every place immediately carries structured
+    /// opening periods and the place's UTC offset.
+    var spotsCacheClearedForDetailsV3: Bool {
+        didSet { defaults.set(spotsCacheClearedForDetailsV3, forKey: Keys.spotsCacheClearedForDetailsV3) }
     }
 
     var user: UserProfile = .placeholder
@@ -134,9 +151,11 @@ final class UserPreferencesService {
         self.notificationsEnabled = defaults.bool(forKey: Keys.notificationsEnabled)
         self.activeCityId = defaults.string(forKey: Keys.activeCityId) ?? ""
         self.locationRequested = defaults.bool(forKey: Keys.locationRequested)
+        self.cityPinned = defaults.bool(forKey: Keys.cityPinned)
         self.lastSessionCityId = defaults.string(forKey: Keys.lastSessionCityId)
         self.spotsCacheMigratedV2 = defaults.bool(forKey: Keys.spotsCacheMigratedV2)
         self.spotsListCacheClearedForPhotos10 = defaults.bool(forKey: Keys.spotsListCacheClearedForPhotos10)
+        self.spotsCacheClearedForDetailsV3 = defaults.bool(forKey: Keys.spotsCacheClearedForDetailsV3)
 
         if let data = defaults.data(forKey: Keys.lastDynamicCity),
            let decoded = try? JSONDecoder().decode(City.self, from: data) {
@@ -171,7 +190,7 @@ final class UserPreferencesService {
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             self.recentSearches = decoded
         } else {
-            self.recentSearches = ["Old Town", "Telliskivi", "Raeko"]
+            self.recentSearches = []
         }
     }
 

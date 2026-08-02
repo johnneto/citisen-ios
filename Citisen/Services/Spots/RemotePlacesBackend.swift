@@ -96,10 +96,6 @@ final class RemotePlacesBackend: PlacesBackend {
         }
     }
 
-    func search(query: String, city: City) async -> [Place] {
-        await mockFallback.search(query: query, city: city)
-    }
-
     func resolvePlace(id: UUID) async -> Place? {
         if let cached = cache.loadPlace(id: id) { return cached }
         return await mockFallback.resolvePlace(id: id)
@@ -115,17 +111,14 @@ final class RemotePlacesBackend: PlacesBackend {
 
         if let gpid = googlePlaceId, let cityId, let mode {
             do {
-                guard let details = try await places.placeDetails(id: gpid) else {
-                    return .notFound
-                }
-                guard let place = PlaceMapper.makePlace(
-                    from: details,
+                guard let place = try await fetchAndCache(
+                    googlePlaceId: gpid,
+                    sessionToken: nil,
                     cityId: cityId,
                     mode: mode
                 ) else {
                     return .notFound
                 }
-                cache.savePlace(place)
                 return .found(place)
             } catch let spotsError as SpotsError {
                 switch spotsError {
@@ -147,6 +140,24 @@ final class RemotePlacesBackend: PlacesBackend {
         return .notFound
     }
 
+    func enrichPlace(_ place: Place) async -> Place? {
+        guard place.detailsFetchedAt == nil, let googlePlaceId = place.googlePlaceId else {
+            return nil
+        }
+        do {
+            guard let details = try await places.placeDetails(id: googlePlaceId),
+                  let fresh = PlaceMapper.makePlace(from: details, cityId: place.cityId, mode: place.mode) else {
+                return nil
+            }
+            let merged = PlaceMapper.merge(fullDetails: fresh, preservingCuratedFrom: place)
+            cache.savePlace(merged)
+            return merged
+        } catch {
+            AppLog.places.error("enrichPlace failed for \(googlePlaceId, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     func clearCache(forCityId cityId: String) {
         cache.clearLists(forCityId: cityId)
     }
@@ -156,10 +167,12 @@ final class RemotePlacesBackend: PlacesBackend {
         guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
         return cached.places
     }
+}
 
-    // MARK: - Internals
+// MARK: - Resolution internals
 
-    private func runStream(
+private extension RemotePlacesBackend {
+    func runStream(
         city: City,
         mode: TravelMode,
         viewport: Viewport?,
@@ -233,7 +246,7 @@ final class RemotePlacesBackend: PlacesBackend {
         cache.saveList(key: key, places: resolved, viewport: effectiveViewport)
     }
 
-    private func resolvePlaces(
+    func resolvePlaces(
         curated: [CuratedSpot],
         city: City,
         mode: TravelMode,
@@ -276,7 +289,7 @@ final class RemotePlacesBackend: PlacesBackend {
         return resolved
     }
 
-    private func resolveOne(
+    func resolveOne(
         _ curated: CuratedSpot,
         city: City,
         mode: TravelMode,
@@ -285,25 +298,43 @@ final class RemotePlacesBackend: PlacesBackend {
         let query = "\(curated.name), \(city.name)"
         let typeHint = curated.primaryType?.trimmingCharacters(in: .whitespaces)
         let normalizedHint = (typeHint?.isEmpty == false) ? typeHint : nil
+        // Bias over the whole viewport so outskirt suggestions aren't punished
+        // (Places caps the circle at 50 km).
+        let biasRadius = min(max(viewport.radiusKm * 1000, 5_000), 50_000)
+        let context = PlaceResolutionScorer.Context(
+            curatedName: curated.name,
+            cityCenter: viewport.center,
+            cityRadiusMeters: biasRadius
+        )
         do {
-            var details = try await places.searchText(
+            var candidates = try await places.searchTextCandidates(
                 query: query,
                 near: viewport.center,
+                radius: biasRadius,
                 includedType: normalizedHint
             )
-            // If the type-filtered search returned nothing, the Gemini hint was
-            // likely wrong — retry without it so we still pick up the place.
-            if details == nil, normalizedHint != nil {
+            var choice = PlaceResolutionScorer.pickBest(candidates, context: context)
+            // If the type-filtered search produced nothing usable, the Gemini hint
+            // was likely wrong — retry without it so we still pick up the place.
+            if choice == nil, normalizedHint != nil {
                 AppLog.places.debug("No type-filtered match for \(curated.name, privacy: .public) (hint=\(normalizedHint ?? "-", privacy: .public)); retrying without includedType")
-                details = try await places.searchText(query: query, near: viewport.center)
+                candidates = try await places.searchTextCandidates(
+                    query: query,
+                    near: viewport.center,
+                    radius: biasRadius
+                )
+                choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             }
-            guard let details else {
+            guard let choice else {
                 AppLog.places.debug("No match for \(curated.name, privacy: .public)")
                 return nil
             }
+            if choice.index != 0 {
+                AppLog.places.info("Ranking override for \(curated.name, privacy: .public): picked #\(choice.index) '\(choice.place.displayName?.text ?? "-", privacy: .public)' score=\(String(format: "%.2f", choice.score), privacy: .public) nameSim=\(String(format: "%.2f", choice.nameSimilarity), privacy: .public) ratings=\(choice.place.userRatingCount ?? 0)")
+            }
             try Task.checkCancellation()
             return PlaceMapper.makePlace(
-                from: details,
+                from: choice.place,
                 curated: curated,
                 city: city,
                 mode: mode
@@ -321,16 +352,57 @@ final class RemotePlacesBackend: PlacesBackend {
         }
     }
 
-    private func cacheKey(cityId: String, mode: TravelMode) -> String {
+    func cacheKey(cityId: String, mode: TravelMode) -> String {
         "\(cityId)_\(mode.rawValue)"
     }
 
-    private func defaultViewport(for city: City) -> Viewport {
+    func defaultViewport(for city: City) -> Viewport {
         let delta = city.defaultSpanKm / 111
         return Viewport(
             center: city.center.clLocation,
             latitudeDelta: delta,
             longitudeDelta: delta
         )
+    }
+}
+
+// MARK: - Search resolution
+
+extension RemotePlacesBackend {
+    func resolveSearchResult(
+        placeId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async -> Place? {
+        if let cached = cache.loadPlace(id: Place.id(forGooglePlaceId: placeId)) { return cached }
+        do {
+            return try await fetchAndCache(
+                googlePlaceId: placeId,
+                sessionToken: sessionToken,
+                cityId: cityId,
+                mode: mode
+            )
+        } catch {
+            AppLog.places.error("resolveSearchResult failed for \(placeId, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Fetches details for a Google place id, maps it with the caller's `cityId`
+    /// and `mode`, and writes it to the on-disk place cache. `sessionToken` binds
+    /// the call to a preceding autocomplete session for billing.
+    fileprivate func fetchAndCache(
+        googlePlaceId: String,
+        sessionToken: String?,
+        cityId: String,
+        mode: TravelMode
+    ) async throws -> Place? {
+        guard let details = try await places.placeDetails(id: googlePlaceId, sessionToken: sessionToken),
+              let place = PlaceMapper.makePlace(from: details, cityId: cityId, mode: mode) else {
+            return nil
+        }
+        cache.savePlace(place)
+        return place
     }
 }

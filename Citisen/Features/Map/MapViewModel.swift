@@ -23,6 +23,9 @@ final class MapViewModel {
 
     private(set) var places: [Place] = []
     private(set) var phase: Phase = .idle
+    /// City to offer as a new destination after the user tapped Near Me while a
+    /// different city was pinned. Nil whenever no offer is pending.
+    private(set) var locationSuggestion: City?
     // `@ObservationIgnored`: written on every map-camera frame during pan/tilt
     // but only ever read on POI selection (for span). Observing it would re-evaluate
     // the `Map` content closure 60×/sec and flicker the pin shadows.
@@ -35,6 +38,8 @@ final class MapViewModel {
 
     private var loadTask: Task<Void, Never>?
     private var hasCenteredOnUser: Bool = false
+    @ObservationIgnored private var isAwaitingLocationCity: Bool = false
+    @ObservationIgnored private var locationSuggestionTask: Task<Void, Never>?
 
     init(
         places: PlacesService,
@@ -122,6 +127,7 @@ final class MapViewModel {
     /// available — otherwise asks the user to fetch.
     func handleCityChange() {
         loadTask?.cancel()
+        clearLocationSuggestion()
         recenterOnCity()
         applyCacheOrIdle()
     }
@@ -163,6 +169,7 @@ final class MapViewModel {
             } else {
                 locationService.startUpdating()
             }
+            beginLocationSuggestion()
             return true
         case .notDetermined:
             locationService.requestWhenInUse()
@@ -196,5 +203,62 @@ final class MapViewModel {
                 longitudeDelta: city.defaultSpanKm / 111
             )
         ))
+    }
+}
+
+// MARK: - "Travel to where I actually am" offer
+
+extension MapViewModel {
+    /// Near Me only moves the camera — a pinned city stays pinned. When the
+    /// device turns out to be in a *different* city, offer to move the trip
+    /// there rather than silently doing it (or silently ignoring it).
+    private func beginLocationSuggestion() {
+        guard cityService.isCityPinned else { return }
+        if evaluateLocationSuggestion() { return }
+        // The reverse geocode is still in flight. `noteDynamicCityResolved()`
+        // retries once it lands; the timer closes the window so a much later,
+        // unrelated geocode can't raise a surprise card.
+        isAwaitingLocationCity = true
+        locationSuggestionTask?.cancel()
+        locationSuggestionTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.isAwaitingLocationCity = false
+        }
+    }
+
+    /// Raises the offer when the geocoded city differs from the pinned one.
+    /// Returns whether an offer is now showing.
+    @discardableResult
+    private func evaluateLocationSuggestion() -> Bool {
+        guard cityService.isCityPinned,
+              let candidate = cityService.dynamicCity,
+              candidate.id != cityService.activeCity.id else { return false }
+        isAwaitingLocationCity = false
+        locationSuggestionTask?.cancel()
+        locationSuggestion = candidate
+        return true
+    }
+
+    /// Called by `MapScreen` when the reverse geocode produces a new city, so a
+    /// Near Me tap that landed before the geocode still gets its offer.
+    func noteDynamicCityResolved() {
+        guard isAwaitingLocationCity else { return }
+        isAwaitingLocationCity = false
+        evaluateLocationSuggestion()
+    }
+
+    /// Hands the trip back to the device's real location. `unpinCity()` bumps the
+    /// selection epoch, which recentres the camera and fires the welcome overlay.
+    func acceptLocationSuggestion() {
+        clearLocationSuggestion()
+        cityService.unpinCity()
+    }
+
+    func clearLocationSuggestion() {
+        isAwaitingLocationCity = false
+        locationSuggestionTask?.cancel()
+        locationSuggestionTask = nil
+        if locationSuggestion != nil { locationSuggestion = nil }
     }
 }

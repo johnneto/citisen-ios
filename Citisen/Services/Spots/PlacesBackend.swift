@@ -62,4 +62,15 @@ protocol PlacesBackend: AnyObject {
     /// ignoring viewport constraints. Used to restore the previous session's results
     /// on cold start. Returns nil when no valid cache entry exists.
     func cachedSpots(city: City, mode: TravelMode) -> [Place]?
+
+    /// Searched places the user chose to keep for this city + mode. Stored apart
+    /// from the curated list so they survive its TTL, a `forceRefresh`, and
+    /// `clearCache(forCityId:)`.
+    func keptSpots(cityId: String, mode: TravelMode) -> [Place]
+
+    /// Persists `place` as a kept spot, filed under its own `cityId` and `mode`
+    /// rather than whatever is active now — the user may have switched either
+    /// while the sheet was open. Returns the `.userSaved` copy to publish.
+    @discardableResult
+    func keepSpot(_ place: Place) -> Place
 }

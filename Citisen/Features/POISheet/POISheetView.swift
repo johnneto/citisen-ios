@@ -23,6 +23,8 @@ struct POISheetView: View {
     private var router
     @Environment(LocationService.self)
     private var locationService
+    @Environment(PlacesService.self)
+    private var placesService
 
     @Query private var savedQueryResults: [SavedSpotEntity]
 
@@ -44,6 +46,17 @@ struct POISheetView: View {
     /// the entity from the saved tab while the sheet is open).
     private var currentRating: SavedSpotRating? {
         savedQueryResults.first?.rating
+    }
+
+    /// `place` arrives as a `let` from `POIPage`'s `@State`, so keeping a spot
+    /// wouldn't re-render it. `PlacesService` is `@Observable`, so reading
+    /// provenance back out of the snapshot picks up the change immediately.
+    private var liveSource: PlaceSource {
+        placesService.place(id: place.id)?.source ?? place.source
+    }
+
+    private var shouldOfferToKeep: Bool {
+        liveSource == .userSearch && !placesService.declinedKeepIds.contains(place.id)
     }
 
     var body: some View {
@@ -103,6 +116,7 @@ struct POISheetView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     header
+                    keepPrompt
                     titleAndMeta
                     if !shouldExpand {
                         whyVisitRow
@@ -164,6 +178,9 @@ struct POISheetView: View {
     private var header: some View {
         HStack(spacing: 8) {
             ModeChip(mode: place.mode, style: .tint)
+            if liveSource == .userSaved {
+                FoundBySearchBadge()
+            }
             closedBadge
             Spacer()
             Button {
@@ -177,6 +194,36 @@ struct POISheetView: View {
                     .clipShape(Circle())
             }
             .accessibilityLabel("Close")
+        }
+    }
+
+    @ViewBuilder private var keepPrompt: some View {
+        if shouldOfferToKeep {
+            KeepSearchedPlaceCard(
+                cityName: Self.resolveCityInfo(
+                    for: place.cityId,
+                    cityService: cityService,
+                    prefs: prefs
+                )?.name,
+                onKeep: keepPlace,
+                onDecline: declineKeep
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func keepPlace() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            placesService.keepSpot(place)
+        }
+    }
+
+    private func declineKeep() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            placesService.declineKeep(id: place.id)
         }
     }
 

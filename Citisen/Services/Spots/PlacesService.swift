@@ -5,6 +5,12 @@ import Observation
 @MainActor
 final class PlacesService {
     private(set) var snapshot: [UUID: Place] = [:]
+    /// Ids of searched places the user has kept. Observing this is how the map
+    /// learns to promote a transient search pin into a permanent one.
+    private(set) var keptSpotIds: Set<UUID> = []
+    /// Places the user declined to keep. Session-only by design — a fresh launch
+    /// may offer again, and nothing about a "not now" is worth persisting.
+    private(set) var declinedKeepIds: Set<UUID> = []
     private let backend: any PlacesBackend
 
     init(backend: any PlacesBackend) {
@@ -128,6 +134,30 @@ final class PlacesService {
         guard let places = backend.cachedSpots(city: city, mode: mode) else { return nil }
         ingest(places)
         return places
+    }
+
+    // MARK: - Kept searched places
+
+    /// Searched places the user kept for this city + mode, ingested so the POI
+    /// sheet and places list resolve them without a network round-trip.
+    func keptSpots(cityId: String, mode: TravelMode) -> [Place] {
+        let kept = backend.keptSpots(cityId: cityId, mode: mode)
+        ingest(kept)
+        keptSpotIds.formUnion(kept.map(\.id))
+        return kept
+    }
+
+    @discardableResult
+    func keepSpot(_ place: Place) -> Place {
+        let kept = backend.keepSpot(place)
+        snapshot[kept.id] = kept
+        keptSpotIds.insert(kept.id)
+        declinedKeepIds.remove(kept.id)
+        return kept
+    }
+
+    func declineKeep(id: UUID) {
+        declinedKeepIds.insert(id)
     }
 
     private func ingest(_ places: [Place]) {

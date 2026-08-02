@@ -78,4 +78,9 @@ final class MockPlacesBackend: PlacesBackend {
     func clearCache(forCityId cityId: String) {}
 
     func cachedSpots(city: City, mode: TravelMode) -> [Place]? { nil }
+
+    func keptSpots(cityId: String, mode: TravelMode) -> [Place] { [] }
+
+    @discardableResult
+    func keepSpot(_ place: Place) -> Place { place.withSource(.userSaved) }
 }

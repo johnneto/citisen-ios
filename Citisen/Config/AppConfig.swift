@@ -13,6 +13,10 @@ enum AppConfig {
     enum Spots {
         static let cacheTTLDays: Double = 30
         static var cacheTTLSeconds: TimeInterval { cacheTTLDays * 86_400 }
+        /// Ceiling on searched places the user has chosen to keep, per city +
+        /// travel mode. Kept places never expire, so this is the only bound on
+        /// the `saved_*.json` files; the oldest are dropped past it.
+        static let maxKeptPlacesPerCityMode = 100
         static let minSpotsPerRequest = 20
         static let maxSpotsPerRequest = 60
         static let placesConcurrency = 8

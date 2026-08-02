@@ -115,7 +115,8 @@ final class RemotePlacesBackend: PlacesBackend {
                     googlePlaceId: gpid,
                     sessionToken: nil,
                     cityId: cityId,
-                    mode: mode
+                    mode: mode,
+                    source: .aiCurated
                 ) else {
                     return .notFound
                 }
@@ -171,6 +172,21 @@ final class RemotePlacesBackend: PlacesBackend {
         guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
         // Lists cached before dedupe landed can still hold repeats.
         return cached.places.uniquedById()
+    }
+
+    func keptSpots(cityId: String, mode: TravelMode) -> [Place] {
+        cache.loadKeptPlaces(key: cacheKey(cityId: cityId, mode: mode))
+    }
+
+    @discardableResult
+    func keepSpot(_ place: Place) -> Place {
+        let kept = place.withSource(.userSaved)
+        // Both writes matter: the per-place file is what `resolvePlaceResult`
+        // reads when the sheet reopens the spot later, so the badge survives
+        // even if the kept list for that city+mode is never consulted.
+        cache.savePlace(kept)
+        cache.appendKeptPlace(kept, key: cacheKey(cityId: kept.cityId, mode: kept.mode))
+        return kept
     }
 }
 
@@ -393,13 +409,17 @@ extension RemotePlacesBackend {
         cityId: String,
         mode: TravelMode
     ) async -> Place? {
+        // A place the curation pipeline already resolved keeps its `.aiCurated`
+        // provenance, so searching for a spot that is already on the map never
+        // raises the "keep this?" offer.
         if let cached = cache.loadPlace(id: Place.id(forGooglePlaceId: placeId)) { return cached }
         do {
             return try await fetchAndCache(
                 googlePlaceId: placeId,
                 sessionToken: sessionToken,
                 cityId: cityId,
-                mode: mode
+                mode: mode,
+                source: .userSearch
             )
         } catch {
             AppLog.places.error("resolveSearchResult failed for \(placeId, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -414,7 +434,8 @@ extension RemotePlacesBackend {
         googlePlaceId: String,
         sessionToken: String?,
         cityId: String,
-        mode: TravelMode
+        mode: TravelMode,
+        source: PlaceSource
     ) async throws -> Place? {
         guard let details = try await places.placeDetails(
                   id: googlePlaceId,
@@ -422,7 +443,12 @@ extension RemotePlacesBackend {
                   languageCode: PlaceLocale.languageCode(forCityId: cityId),
                   regionCode: PlaceLocale.countryCode(fromCityId: cityId)
               ),
-              let place = PlaceMapper.makePlace(from: details, cityId: cityId, mode: mode) else {
+              let place = PlaceMapper.makePlace(
+                  from: details,
+                  cityId: cityId,
+                  mode: mode,
+                  source: source
+              ) else {
             return nil
         }
         cache.savePlace(place)

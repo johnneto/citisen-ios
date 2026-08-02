@@ -11,6 +11,7 @@ enum CacheMigrator {
     static func runIfNeeded(prefs: UserPreferencesService) {
         runListCachePhotoBump(prefs: prefs)
         runDetailsV3Bump(prefs: prefs)
+        runLocalizedNamesBump(prefs: prefs)
         guard !prefs.spotsCacheMigratedV2 else { return }
         defer { prefs.spotsCacheMigratedV2 = true }
 
@@ -116,6 +117,28 @@ enum CacheMigrator {
         )) ?? []
         for url in contents
         where url.lastPathComponent.hasPrefix("list_") || url.lastPathComponent.hasPrefix("place_") {
+            try? fileManager.removeItem(at: url)
+        }
+    }
+
+    /// One-shot wipe of both `list_*` and `place_*` caches after place resolution
+    /// began requesting city-local place names and skipping permanently closed
+    /// listings. Entries cached before that can carry a name in an unrelated
+    /// language ("누에바광장" for Granada's Plaza Nueva) or a shuttered venue, and
+    /// nothing re-resolves them until the 30-day TTL runs out.
+    private static func runLocalizedNamesBump(prefs: UserPreferencesService) {
+        guard !prefs.spotsCacheClearedForLocalizedNames else { return }
+        defer { prefs.spotsCacheClearedForLocalizedNames = true }
+        wipeSpotsCache(prefixes: ["list_", "place_"])
+    }
+
+    private static func wipeSpotsCache(prefixes: [String]) {
+        let fileManager = FileManager.default
+        let contents = (try? fileManager.contentsOfDirectory(
+            at: spotsDirectory(),
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for url in contents where prefixes.contains(where: url.lastPathComponent.hasPrefix) {
             try? fileManager.removeItem(at: url)
         }
     }

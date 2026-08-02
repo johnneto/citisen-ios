@@ -21,6 +21,7 @@ final class UserPreferencesService {
         static let spotsCacheMigratedV2 = "citisen.spotsCacheMigratedV2"
         static let spotsListCacheClearedForPhotos10 = "citisen.spotsListCacheClearedForPhotos10"
         static let spotsCacheClearedForDetailsV3 = "citisen.spotsCacheClearedForDetailsV3"
+        static let spotsCacheClearedForLocalizedNames = "citisen.spotsCacheClearedForLocalizedNames"
     }
 
     static let maxRecentCities = 10
@@ -139,6 +140,14 @@ final class UserPreferencesService {
         didSet { defaults.set(spotsCacheClearedForDetailsV3, forKey: Keys.spotsCacheClearedForDetailsV3) }
     }
 
+    /// One-shot flag: wipes both `list_*` and `place_*` spot caches once after
+    /// place resolution started asking Google for city-local names, so listings
+    /// cached under an unrelated language ("누에바광장" for Plaza Nueva) and
+    /// permanently closed venues are re-resolved instead of lingering for 30 days.
+    var spotsCacheClearedForLocalizedNames: Bool {
+        didSet { defaults.set(spotsCacheClearedForLocalizedNames, forKey: Keys.spotsCacheClearedForLocalizedNames) }
+    }
+
     var user: UserProfile = .placeholder
 
     private let defaults: UserDefaults
@@ -156,6 +165,7 @@ final class UserPreferencesService {
         self.spotsCacheMigratedV2 = defaults.bool(forKey: Keys.spotsCacheMigratedV2)
         self.spotsListCacheClearedForPhotos10 = defaults.bool(forKey: Keys.spotsListCacheClearedForPhotos10)
         self.spotsCacheClearedForDetailsV3 = defaults.bool(forKey: Keys.spotsCacheClearedForDetailsV3)
+        self.spotsCacheClearedForLocalizedNames = defaults.bool(forKey: Keys.spotsCacheClearedForLocalizedNames)
 
         if let data = defaults.data(forKey: Keys.lastDynamicCity),
            let decoded = try? JSONDecoder().decode(City.self, from: data) {

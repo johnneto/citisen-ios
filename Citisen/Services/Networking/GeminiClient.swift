@@ -103,6 +103,12 @@ final class GeminiClient {
         set "neighborhood" to disambiguate.
 
         SELECTION RULES
+        - NEVER suggest a venue that has permanently closed, shut down, relocated under a \
+        new name, or is currently closed for long-term renovation. Every pick must be open \
+        and trading today. If you are not confident a place is still operating, leave it out \
+        and suggest another.
+        - Never suggest ticket resellers, tour operators or booking desks that trade on a \
+        landmark's name (e.g. "Alhambra Tickets & Tours") — name the landmark itself.
         - Exclude global chains (e.g. Starbucks, McDonald's). Local or regional chains are \
         allowed only when they are genuinely part of local culture.
         - Prefer places locals actually use and rate highly; skip tourist traps that survive \

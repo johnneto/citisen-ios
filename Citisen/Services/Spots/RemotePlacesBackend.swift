@@ -145,7 +145,11 @@ final class RemotePlacesBackend: PlacesBackend {
             return nil
         }
         do {
-            guard let details = try await places.placeDetails(id: googlePlaceId),
+            guard let details = try await places.placeDetails(
+                      id: googlePlaceId,
+                      languageCode: PlaceLocale.languageCode(forCityId: place.cityId),
+                      regionCode: PlaceLocale.countryCode(fromCityId: place.cityId)
+                  ),
                   let fresh = PlaceMapper.makePlace(from: details, cityId: place.cityId, mode: place.mode) else {
                 return nil
             }
@@ -306,12 +310,18 @@ private extension RemotePlacesBackend {
             cityCenter: viewport.center,
             cityRadiusMeters: biasRadius
         )
+        // Gemini is asked for local-language official names, so resolve in the same
+        // language: it keeps name matching meaningful and stops Google handing back
+        // a listing's name in an unrelated language.
+        let languageCode = PlaceLocale.languageCode(for: city)
         do {
             var candidates = try await places.searchTextCandidates(
                 query: query,
                 near: viewport.center,
                 radius: biasRadius,
-                includedType: normalizedHint
+                includedType: normalizedHint,
+                languageCode: languageCode,
+                regionCode: city.countryCode
             )
             var choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             // If the type-filtered search produced nothing usable, the Gemini hint
@@ -321,7 +331,9 @@ private extension RemotePlacesBackend {
                 candidates = try await places.searchTextCandidates(
                     query: query,
                     near: viewport.center,
-                    radius: biasRadius
+                    radius: biasRadius,
+                    languageCode: languageCode,
+                    regionCode: city.countryCode
                 )
                 choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             }
@@ -398,7 +410,12 @@ extension RemotePlacesBackend {
         cityId: String,
         mode: TravelMode
     ) async throws -> Place? {
-        guard let details = try await places.placeDetails(id: googlePlaceId, sessionToken: sessionToken),
+        guard let details = try await places.placeDetails(
+                  id: googlePlaceId,
+                  sessionToken: sessionToken,
+                  languageCode: PlaceLocale.languageCode(forCityId: cityId),
+                  regionCode: PlaceLocale.countryCode(fromCityId: cityId)
+              ),
               let place = PlaceMapper.makePlace(from: details, cityId: cityId, mode: mode) else {
             return nil
         }

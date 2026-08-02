@@ -13,8 +13,20 @@ struct CachedPlace: Codable {
     let place: Place
 }
 
+/// Searched places the user explicitly chose to keep alongside the AI
+/// suggestions for a city + mode. Deliberately has no `cachedAt`: unlike the
+/// curated list these never expire, because the user picked them.
+struct KeptPlaceList: Codable {
+    let updatedAt: Date
+    let places: [Place]
+}
+
 final class SpotsCache {
     private let directory: URL
+    /// Kept places live outside `Caches`: everything else here is regenerable
+    /// from Gemini + Google Places, but a spot the user deliberately kept is
+    /// not, and iOS may purge `Caches` under storage pressure.
+    private let keptDirectory: URL
     private let fileManager: FileManager
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -34,6 +46,15 @@ final class SpotsCache {
         )) ?? URL(fileURLWithPath: NSTemporaryDirectory())
         self.directory = caches.appendingPathComponent("Spots", isDirectory: true)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let support = (try? fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )) ?? caches
+        self.keptDirectory = support.appendingPathComponent("KeptSpots", isDirectory: true)
+        try? fileManager.createDirectory(at: keptDirectory, withIntermediateDirectories: true)
 
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
@@ -105,10 +126,44 @@ final class SpotsCache {
         try? data.write(to: placeURL(for: place.id), options: .atomic)
     }
 
+    // MARK: - Kept places
+
+    /// No TTL check — kept places outlive the curated list on purpose.
+    func loadKeptPlaces(key: String) -> [Place] {
+        guard let data = try? Data(contentsOf: keptURL(for: key)),
+              let entry = try? decoder.decode(KeptPlaceList.self, from: data) else {
+            return []
+        }
+        return entry.places
+    }
+
+    /// Appends `place`, replacing any earlier entry with the same id so a
+    /// re-kept place keeps its position rather than duplicating. Oldest entries
+    /// are dropped once the per-city+mode cap is exceeded.
+    func appendKeptPlace(_ place: Place, key: String) {
+        var places = loadKeptPlaces(key: key)
+        if let existing = places.firstIndex(where: { $0.id == place.id }) {
+            places[existing] = place
+        } else {
+            places.append(place)
+        }
+        let cap = AppConfig.Spots.maxKeptPlacesPerCityMode
+        if places.count > cap {
+            places.removeFirst(places.count - cap)
+        }
+        let entry = KeptPlaceList(updatedAt: Date(), places: places)
+        guard let data = try? encoder.encode(entry) else { return }
+        try? data.write(to: keptURL(for: key), options: .atomic)
+    }
+
     // MARK: - URLs
 
     private func listURL(for key: String) -> URL {
         directory.appendingPathComponent("list_\(sanitize(key)).json")
+    }
+
+    private func keptURL(for key: String) -> URL {
+        keptDirectory.appendingPathComponent("kept_\(sanitize(key)).json")
     }
 
     private func placeURL(for id: UUID) -> URL {

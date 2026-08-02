@@ -83,6 +83,9 @@ struct MapScreen: View {
         .onChange(of: prefs.activeMode) { _, _ in
             viewModel?.applyCacheOrIdle()
         }
+        .onChange(of: places.keptSpotIds) { _, _ in
+            viewModel?.noteKeptSpotsChanged()
+        }
         .onChange(of: router.recenterTrigger) { _, _ in
             guard let id = router.poiSelectedId,
                   let vm = viewModel,
@@ -121,53 +124,73 @@ struct MapScreen: View {
 
     private func mapContent(_ vm: MapViewModel) -> some View {
         @Bindable var vm = vm
-        let filtered = vm.filteredPlaces()
-        let filteredIds = filtered.map(\.id)
-        return Map(position: $vm.cameraPosition) {
-            if let userCoord = locationService.currentLocation {
-                Annotation("", coordinate: userCoord, anchor: .center) {
-                    UserHeadingAnnotation(
-                        locationService: locationService,
-                        tracker: headingTracker
+        let filtered = vm.filteredPlaces
+        let filteredIds = vm.filteredPlaceIds
+        // The open place when it has no pin of its own — opened from search, or a
+        // curated spot currently excluded by a sub-filter. Without this the camera
+        // pans to a bare stretch of map while its sheet is up.
+        let detached = detachedSelection(excluding: filteredIds)
+        return MapReader { proxy in
+            Map(position: $vm.cameraPosition) {
+                if let userCoord = locationService.currentLocation {
+                    Annotation("", coordinate: userCoord, anchor: .center) {
+                        UserHeadingAnnotation(
+                            locationService: locationService,
+                            tracker: headingTracker
+                        )
+                    }
+                    .annotationTitles(.hidden)
+                }
+                ForEach(filtered) { place in
+                    Annotation(place.name, coordinate: place.coordinate.clLocation) {
+                        pin(place, isSelected: isCurrent(place)) {
+                            router.openPOI(place.id, in: filteredIds)
+                        }
+                    }
+                }
+
+                if let detached {
+                    Annotation(detached.name, coordinate: detached.coordinate.clLocation) {
+                        pin(detached, isSelected: true) {
+                            router.requestPOIRecenter()
+                        }
+                    }
+                }
+            }
+            // Pin taps are resolved by `MapPinHitTester` rather than by a Button
+            // inside each annotation — see that type for why the buttons had to go.
+            //
+            // `simultaneousGesture` rather than `onTapGesture`: an exclusive tap
+            // recognizer would claim the first tap of MapKit's own double-tap-to-
+            // zoom and cancel it, trading one broken zoom gesture for another.
+            .simultaneousGesture(
+                SpatialTapGesture(coordinateSpace: .local).onEnded { value in
+                    handleMapTap(
+                        at: value.location,
+                        hitTester: MapPinHitTester(proxy: proxy),
+                        pins: filtered,
+                        ids: filteredIds,
+                        detached: detached
                     )
                 }
-                .annotationTitles(.hidden)
+            )
+            .onMapCameraChange(frequency: .continuous) { context in
+                // Both writes intentionally avoid the @Observable graph of the Map
+                // content closure: `visibleRegion` is @ObservationIgnored, and the
+                // tracker is only read inside `UserHeadingAnnotation.body`. Without
+                // this isolation a 60 Hz camera stream re-diffed every pin and
+                // flickered their shadows on tilt/move.
+                vm.visibleRegion = context.region
+                headingTracker.update(context.camera.heading)
             }
-            ForEach(filtered) { place in
-                Annotation(place.name, coordinate: place.coordinate.clLocation) {
-                    Button {
-                        #if canImport(UIKit)
-                        UISelectionFeedbackGenerator().selectionChanged()
-                        #endif
-                        router.openPOI(place.id, in: filteredIds)
-                    } label: {
-                        MapPinView(mode: place.mode, isSelected: isCurrent(place))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("\(place.name), \(place.category)"))
-                }
+            .mapControls {
+                MapCompass()
+                MapPitchToggle()
             }
-        }
-        .onMapCameraChange(frequency: .continuous) { context in
-            // Both writes intentionally avoid the @Observable graph of the Map
-            // content closure: `visibleRegion` is @ObservationIgnored, and the
-            // tracker is only read inside `UserHeadingAnnotation.body`. Without
-            // this isolation a 60 Hz camera stream re-diffed every pin and
-            // flickered their shadows on tilt/move.
-            vm.visibleRegion = context.region
-            headingTracker.update(context.camera.heading)
-        }
-        .mapControls {
-            MapCompass()
-            MapPitchToggle()
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: prefs.activeMode)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: vm.activeSubFilters)
         .animation(.easeInOut(duration: 0.2), value: vm.phase)
-    }
-
-    private func isCurrent(_ place: Place) -> Bool {
-        router.presentedSheet == .poi && router.poiSelectedId == place.id
     }
 
     @ViewBuilder
@@ -303,6 +326,54 @@ struct MapScreen: View {
                 welcomeCity = nil
             }
         }
+    }
+}
+
+// MARK: - Pins and their taps
+
+private extension MapScreen {
+    /// A pin that is invisible to touch. `allowsHitTesting(false)` is what keeps
+    /// the map's own pan/pinch/rotate recognizers whole; VoiceOver still reaches
+    /// the pin because accessibility activation doesn't go through hit testing.
+    func pin(_ place: Place, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        MapPinView(mode: place.mode, isSelected: isSelected)
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel(Text("\(place.name), \(place.category)"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default, action)
+    }
+
+    func handleMapTap(
+        at point: CGPoint,
+        hitTester: MapPinHitTester,
+        pins: [Place],
+        ids: [UUID],
+        detached: Place?
+    ) {
+        // The detached pin is the one whose sheet is already open, so it wins any
+        // overlap with a neighbouring curated pin.
+        if let detached, hitTester.isHit(detached, at: point) {
+            router.requestPOIRecenter()
+            return
+        }
+        guard let place = hitTester.nearest(to: point, among: pins) else { return }
+        #if canImport(UIKit)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
+        router.openPOI(place.id, in: ids)
+    }
+
+    func isCurrent(_ place: Place) -> Bool {
+        router.presentedSheet == .poi && router.poiSelectedId == place.id
+    }
+
+    /// The place whose sheet is open when it isn't among the rendered pins.
+    func detachedSelection(excluding pinnedIds: [UUID]) -> Place? {
+        guard router.presentedSheet == .poi,
+              let selectedId = router.poiSelectedId,
+              !pinnedIds.contains(selectedId) else { return nil }
+        return places.place(id: selectedId)
     }
 }
 

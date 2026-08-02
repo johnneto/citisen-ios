@@ -115,7 +115,8 @@ final class RemotePlacesBackend: PlacesBackend {
                     googlePlaceId: gpid,
                     sessionToken: nil,
                     cityId: cityId,
-                    mode: mode
+                    mode: mode,
+                    source: .aiCurated
                 ) else {
                     return .notFound
                 }
@@ -145,7 +146,11 @@ final class RemotePlacesBackend: PlacesBackend {
             return nil
         }
         do {
-            guard let details = try await places.placeDetails(id: googlePlaceId),
+            guard let details = try await places.placeDetails(
+                      id: googlePlaceId,
+                      languageCode: PlaceLocale.languageCode(forCityId: place.cityId),
+                      regionCode: PlaceLocale.countryCode(fromCityId: place.cityId)
+                  ),
                   let fresh = PlaceMapper.makePlace(from: details, cityId: place.cityId, mode: place.mode) else {
                 return nil
             }
@@ -165,7 +170,23 @@ final class RemotePlacesBackend: PlacesBackend {
     func cachedSpots(city: City, mode: TravelMode) -> [Place]? {
         let key = cacheKey(cityId: city.id, mode: mode)
         guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
-        return cached.places
+        // Lists cached before dedupe landed can still hold repeats.
+        return cached.places.uniquedById()
+    }
+
+    func keptSpots(cityId: String, mode: TravelMode) -> [Place] {
+        cache.loadKeptPlaces(key: cacheKey(cityId: cityId, mode: mode))
+    }
+
+    @discardableResult
+    func keepSpot(_ place: Place) -> Place {
+        let kept = place.withSource(.userSaved)
+        // Both writes matter: the per-place file is what `resolvePlaceResult`
+        // reads when the sheet reopens the spot later, so the badge survives
+        // even if the kept list for that city+mode is never consulted.
+        cache.savePlace(kept)
+        cache.appendKeptPlace(kept, key: cacheKey(cityId: kept.cityId, mode: kept.mode))
+        return kept
     }
 }
 
@@ -186,7 +207,7 @@ private extension RemotePlacesBackend {
            let cached = cache.loadEntry(key: key),
            !cached.places.isEmpty {
             AppLog.places.debug("SpotsCache hit for \(key, privacy: .public) (stream)")
-            for place in cached.places {
+            for place in cached.places.uniquedById() {
                 continuation.yield(place)
             }
             return
@@ -205,7 +226,11 @@ private extension RemotePlacesBackend {
             throw SpotsError.aiUnavailable("Gemini returned no spots.")
         }
 
+        // Distinct curated names can resolve to the same Google place (aliases,
+        // a venue and its bar). `Place.id` is a v5 UUID over `googlePlaceId`, so
+        // keeping both would stack map pins and collide on every ForEach id.
         var resolved: [Place] = []
+        var seenIds = Set<UUID>()
         try await withThrowingTaskGroup(of: Place?.self) { group in
             let concurrency = AppConfig.Spots.placesConcurrency
             var iterator = curated.makeIterator()
@@ -223,7 +248,7 @@ private extension RemotePlacesBackend {
             while inFlight > 0 {
                 try Task.checkCancellation()
                 if let place = try await group.next() {
-                    if let place {
+                    if let place, seenIds.insert(place.id).inserted {
                         resolved.append(place)
                         cache.savePlace(place)
                         continuation.yield(place)
@@ -254,6 +279,7 @@ private extension RemotePlacesBackend {
     ) async throws -> [Place] {
         let concurrency = AppConfig.Spots.placesConcurrency
         var resolved: [Place] = []
+        var seenIds = Set<UUID>()
 
         try await withThrowingTaskGroup(of: Place?.self) { group in
             var iterator = curated.makeIterator()
@@ -271,7 +297,7 @@ private extension RemotePlacesBackend {
             while inFlight > 0 {
                 try Task.checkCancellation()
                 if let place = try await group.next() {
-                    if let place {
+                    if let place, seenIds.insert(place.id).inserted {
                         resolved.append(place)
                         cache.savePlace(place)
                     }
@@ -306,12 +332,18 @@ private extension RemotePlacesBackend {
             cityCenter: viewport.center,
             cityRadiusMeters: biasRadius
         )
+        // Gemini is asked for local-language official names, so resolve in the same
+        // language: it keeps name matching meaningful and stops Google handing back
+        // a listing's name in an unrelated language.
+        let languageCode = PlaceLocale.languageCode(for: city)
         do {
             var candidates = try await places.searchTextCandidates(
                 query: query,
                 near: viewport.center,
                 radius: biasRadius,
-                includedType: normalizedHint
+                includedType: normalizedHint,
+                languageCode: languageCode,
+                regionCode: city.countryCode
             )
             var choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             // If the type-filtered search produced nothing usable, the Gemini hint
@@ -321,7 +353,9 @@ private extension RemotePlacesBackend {
                 candidates = try await places.searchTextCandidates(
                     query: query,
                     near: viewport.center,
-                    radius: biasRadius
+                    radius: biasRadius,
+                    languageCode: languageCode,
+                    regionCode: city.countryCode
                 )
                 choice = PlaceResolutionScorer.pickBest(candidates, context: context)
             }
@@ -375,13 +409,17 @@ extension RemotePlacesBackend {
         cityId: String,
         mode: TravelMode
     ) async -> Place? {
+        // A place the curation pipeline already resolved keeps its `.aiCurated`
+        // provenance, so searching for a spot that is already on the map never
+        // raises the "keep this?" offer.
         if let cached = cache.loadPlace(id: Place.id(forGooglePlaceId: placeId)) { return cached }
         do {
             return try await fetchAndCache(
                 googlePlaceId: placeId,
                 sessionToken: sessionToken,
                 cityId: cityId,
-                mode: mode
+                mode: mode,
+                source: .userSearch
             )
         } catch {
             AppLog.places.error("resolveSearchResult failed for \(placeId, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -396,10 +434,21 @@ extension RemotePlacesBackend {
         googlePlaceId: String,
         sessionToken: String?,
         cityId: String,
-        mode: TravelMode
+        mode: TravelMode,
+        source: PlaceSource
     ) async throws -> Place? {
-        guard let details = try await places.placeDetails(id: googlePlaceId, sessionToken: sessionToken),
-              let place = PlaceMapper.makePlace(from: details, cityId: cityId, mode: mode) else {
+        guard let details = try await places.placeDetails(
+                  id: googlePlaceId,
+                  sessionToken: sessionToken,
+                  languageCode: PlaceLocale.languageCode(forCityId: cityId),
+                  regionCode: PlaceLocale.countryCode(fromCityId: cityId)
+              ),
+              let place = PlaceMapper.makePlace(
+                  from: details,
+                  cityId: cityId,
+                  mode: mode,
+                  source: source
+              ) else {
             return nil
         }
         cache.savePlace(place)

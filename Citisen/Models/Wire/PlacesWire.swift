@@ -8,6 +8,27 @@ struct SearchTextRequest: Encodable {
     let maxResultCount: Int
     let includedType: String?
     let strictTypeFiltering: Bool?
+    /// Language `displayName` comes back in — see `PlaceLocale`.
+    let languageCode: String?
+    let regionCode: String?
+
+    init(
+        textQuery: String,
+        locationBias: LocationBias,
+        maxResultCount: Int,
+        includedType: String? = nil,
+        strictTypeFiltering: Bool? = nil,
+        languageCode: String? = nil,
+        regionCode: String? = nil
+    ) {
+        self.textQuery = textQuery
+        self.locationBias = locationBias
+        self.maxResultCount = maxResultCount
+        self.includedType = includedType
+        self.strictTypeFiltering = strictTypeFiltering
+        self.languageCode = languageCode
+        self.regionCode = regionCode
+    }
 
     struct LocationBias: Encodable {
         let circle: Circle
@@ -20,6 +41,7 @@ struct SearchTextRequest: Encodable {
 
     private enum CodingKeys: String, CodingKey {
         case textQuery, locationBias, maxResultCount, includedType, strictTypeFiltering
+        case languageCode, regionCode
     }
 
     func encode(to encoder: Encoder) throws {
@@ -29,6 +51,8 @@ struct SearchTextRequest: Encodable {
         try container.encode(maxResultCount, forKey: .maxResultCount)
         try container.encodeIfPresent(includedType, forKey: .includedType)
         try container.encodeIfPresent(strictTypeFiltering, forKey: .strictTypeFiltering)
+        try container.encodeIfPresent(languageCode, forKey: .languageCode)
+        try container.encodeIfPresent(regionCode, forKey: .regionCode)
     }
 }
 

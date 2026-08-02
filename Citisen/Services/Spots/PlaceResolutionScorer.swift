@@ -84,9 +84,9 @@ enum PlaceResolutionScorer {
     /// Diacritic- and case-folded token similarity: half Jaccard, half overlap
     /// coefficient — overlap gives credit when the official name is a superset
     /// of the curated one ("Restaurante O Zé" vs "O Zé").
-    static func nameSimilarity(_ a: String, _ b: String) -> Double {
-        let tokensA = tokens(a)
-        let tokensB = tokens(b)
+    static func nameSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        let tokensA = tokens(lhs)
+        let tokensB = tokens(rhs)
         guard !tokensA.isEmpty, !tokensB.isEmpty else { return 0 }
         let intersection = Double(tokensA.intersection(tokensB).count)
         let jaccard = intersection / Double(tokensA.union(tokensB).count)

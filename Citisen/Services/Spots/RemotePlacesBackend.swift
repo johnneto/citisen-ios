@@ -167,10 +167,12 @@ final class RemotePlacesBackend: PlacesBackend {
         guard let cached = cache.loadEntry(key: key), !cached.places.isEmpty else { return nil }
         return cached.places
     }
+}
 
-    // MARK: - Internals
+// MARK: - Resolution internals
 
-    private func runStream(
+private extension RemotePlacesBackend {
+    func runStream(
         city: City,
         mode: TravelMode,
         viewport: Viewport?,
@@ -244,7 +246,7 @@ final class RemotePlacesBackend: PlacesBackend {
         cache.saveList(key: key, places: resolved, viewport: effectiveViewport)
     }
 
-    private func resolvePlaces(
+    func resolvePlaces(
         curated: [CuratedSpot],
         city: City,
         mode: TravelMode,
@@ -287,7 +289,7 @@ final class RemotePlacesBackend: PlacesBackend {
         return resolved
     }
 
-    private func resolveOne(
+    func resolveOne(
         _ curated: CuratedSpot,
         city: City,
         mode: TravelMode,
@@ -350,11 +352,11 @@ final class RemotePlacesBackend: PlacesBackend {
         }
     }
 
-    private func cacheKey(cityId: String, mode: TravelMode) -> String {
+    func cacheKey(cityId: String, mode: TravelMode) -> String {
         "\(cityId)_\(mode.rawValue)"
     }
 
-    private func defaultViewport(for city: City) -> Viewport {
+    func defaultViewport(for city: City) -> Viewport {
         let delta = city.defaultSpanKm / 111
         return Viewport(
             center: city.center.clLocation,

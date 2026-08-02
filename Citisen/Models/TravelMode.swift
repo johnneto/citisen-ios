@@ -157,18 +157,24 @@ enum TravelMode: String, CaseIterable, Codable, Identifiable, Hashable {
     var typePalette: [String] {
         switch self {
         case .standard:
-            return ["tourist_attraction", "historical_landmark", "monument", "museum",
-                    "art_gallery", "park", "market", "church", "restaurant", "cafe"]
+            return [
+                "tourist_attraction", "historical_landmark", "monument", "museum",
+                "art_gallery", "park", "market", "church", "restaurant", "cafe"
+            ]
         case .food:
             return ["restaurant", "bakery", "market", "cafe", "bar"]
         case .nature:
             return ["park", "garden", "botanical_garden", "beach", "hiking_area", "national_park"]
         case .turbo:
-            return ["tourist_attraction", "historical_landmark", "monument", "museum",
-                    "church", "park", "plaza"]
+            return [
+                "tourist_attraction", "historical_landmark", "monument", "museum",
+                "church", "park", "plaza"
+            ]
         case .history:
-            return ["historical_landmark", "monument", "museum", "church",
-                    "place_of_worship", "cemetery"]
+            return [
+                "historical_landmark", "monument", "museum", "church",
+                "place_of_worship", "cemetery"
+            ]
         case .sports:
             return ["stadium", "arena", "sports_complex", "gym", "park", "historical_landmark"]
         case .nightlife:

@@ -214,7 +214,7 @@ struct MapScreen: View {
                 .padding(.trailing, Spacing.md)
             }
 
-            LiquidGlassTabBar()
+            TravelModeToolbar()
                 .padding(.horizontal, 12)
                 .padding(.bottom, 22)
         }
@@ -291,10 +291,7 @@ private struct NearMeFAB: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(BrandColor.sand)
                 .frame(width: 52, height: 52)
-                .background(AppColor.surfaceElevated)
-                .clipShape(Circle())
-                .overlay(Circle().strokeBorder(AppColor.divider, lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+                .liquidGlass(corner: 26, strength: .regular, interactive: true)
         }
         .buttonStyle(.pressableScale)
         .accessibilityLabel("Center on my location")

@@ -77,6 +77,9 @@ struct MapScreen: View {
         .onChange(of: cityService.citySelectionEpoch) { _, _ in
             handleCityChange()
         }
+        .onChange(of: cityService.dynamicCity?.id) { _, _ in
+            viewModel?.noteDynamicCityResolved()
+        }
         .onChange(of: prefs.activeMode) { _, _ in
             viewModel?.applyCacheOrIdle()
         }
@@ -183,6 +186,7 @@ struct MapScreen: View {
         return VStack(spacing: Spacing.sm) {
             MapTopBar(
                 cityName: cityService.activeCity.name,
+                isCityPinned: cityService.isCityPinned,
                 onTapHamburger: { router.openHamburger() },
                 onTapCity: { router.present(.citySwitcher) },
                 onTapSearch: { router.present(.search) },
@@ -201,8 +205,9 @@ struct MapScreen: View {
                 StreamingSpotsPill(mode: prefs.activeMode)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            phaseBanner(vm)
+            bottomBanner(vm)
                 .animation(.easeInOut(duration: 0.25), value: vm.phase)
+                .animation(.easeInOut(duration: 0.25), value: vm.locationSuggestion?.id)
             HStack {
                 Spacer()
                 NearMeFAB {
@@ -235,6 +240,25 @@ struct MapScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Citisen needs location access to show nearby places. Enable it in Settings.")
+        }
+    }
+
+    /// The "travel to where you actually are" offer takes the banner slot while
+    /// it's up — it's a direct answer to a tap the user just made, so it outranks
+    /// the ambient phase banner underneath.
+    @ViewBuilder
+    private func bottomBanner(_ vm: MapViewModel) -> some View {
+        if let suggestion = vm.locationSuggestion {
+            TravelToLocationCard(
+                cityName: suggestion.name,
+                pinnedCityName: cityService.activeCity.name,
+                onTravel: { vm.acceptLocationSuggestion() },
+                onDismiss: { vm.clearLocationSuggestion() }
+            )
+            .padding(.horizontal, Spacing.md)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else {
+            phaseBanner(vm)
         }
     }
 
@@ -321,6 +345,48 @@ private struct LoadSuggestionsCard: View {
                 .tint(BrandColor.sand)
         }
         .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .liquidGlass(corner: 16, strength: .regular, interactive: true)
+    }
+}
+
+/// Offered after Near Me when the device is in a different city than the pinned
+/// one. Accepting unpins, handing the trip back to the real location.
+private struct TravelToLocationCard: View {
+    let cityName: String
+    let pinnedCityName: String
+    let onTravel: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: Spacing.sm) {
+            Image(systemName: "location.circle.fill")
+                .foregroundStyle(BrandColor.sand)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You're in \(cityName)")
+                    .font(.subheadline15.weight(.semibold))
+                    .foregroundStyle(AppColor.textPrimary)
+                Text("Travel here instead of \(pinnedCityName)?")
+                    .font(.caption12)
+                    .foregroundStyle(AppColor.textSecondary)
+            }
+            Spacer(minLength: 6)
+            Button("Travel", action: onTravel)
+                .font(.footnote13.weight(.semibold))
+                .buttonStyle(.borderless)
+                .tint(BrandColor.sand)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption12.weight(.semibold))
+                    .foregroundStyle(AppColor.textTertiary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Keep \(pinnedCityName)")
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
         .padding(.vertical, 12)
         .liquidGlass(corner: 16, strength: .regular, interactive: true)
     }

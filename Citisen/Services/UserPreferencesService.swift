@@ -17,6 +17,7 @@ final class UserPreferencesService {
         static let lastSessionCityId = "citisen.lastSessionCityId"
         static let lastDynamicCity = "citisen.lastDynamicCity"
         static let recentCities = "citisen.recentCities"
+        static let cityPinned = "citisen.cityPinned"
         static let spotsCacheMigratedV2 = "citisen.spotsCacheMigratedV2"
         static let spotsListCacheClearedForPhotos10 = "citisen.spotsListCacheClearedForPhotos10"
     }
@@ -110,6 +111,14 @@ final class UserPreferencesService {
         }
     }
 
+    /// True once the user has deliberately chosen a city. While set, `activeCityId`
+    /// outranks the reverse-geocoded `lastDynamicCity` in `CityService.activeCity`,
+    /// so a GPS fix can't silently drag the trip back to where the phone is.
+    /// Cleared by "Use my location" in the city switcher.
+    var cityPinned: Bool {
+        didSet { defaults.set(cityPinned, forKey: Keys.cityPinned) }
+    }
+
     /// One-shot flag for the legacy on-disk cache migration (hardcoded ids → `dyn_` ids).
     var spotsCacheMigratedV2: Bool {
         didSet { defaults.set(spotsCacheMigratedV2, forKey: Keys.spotsCacheMigratedV2) }
@@ -134,6 +143,7 @@ final class UserPreferencesService {
         self.notificationsEnabled = defaults.bool(forKey: Keys.notificationsEnabled)
         self.activeCityId = defaults.string(forKey: Keys.activeCityId) ?? ""
         self.locationRequested = defaults.bool(forKey: Keys.locationRequested)
+        self.cityPinned = defaults.bool(forKey: Keys.cityPinned)
         self.lastSessionCityId = defaults.string(forKey: Keys.lastSessionCityId)
         self.spotsCacheMigratedV2 = defaults.bool(forKey: Keys.spotsCacheMigratedV2)
         self.spotsListCacheClearedForPhotos10 = defaults.bool(forKey: Keys.spotsListCacheClearedForPhotos10)
@@ -171,7 +181,7 @@ final class UserPreferencesService {
            let decoded = try? JSONDecoder().decode([String].self, from: data) {
             self.recentSearches = decoded
         } else {
-            self.recentSearches = ["Old Town", "Telliskivi", "Raeko"]
+            self.recentSearches = []
         }
     }
 

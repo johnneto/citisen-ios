@@ -34,6 +34,18 @@ enum AppConfig {
         static let defaultSpanKm: Double = 8
     }
 
+    enum Search {
+        /// Debounce window before firing an autocomplete request as the user types.
+        static let debounceMilliseconds: Int = 250
+        /// Queries shorter than this never hit the network — avoids noise and cost.
+        static let minQueryLength: Int = 2
+        /// Radius of the `locationBias` circle centred on the active city. A bias,
+        /// not a restriction, so far-away matches (e.g. another city) still surface.
+        static let locationBiasRadiusMeters: Double = 30_000
+        /// Cap applied per section (places / cities) before rendering.
+        static let maxSuggestions: Int = 8
+    }
+
     enum Endpoints {
         static let geminiBase = "https://generativelanguage.googleapis.com/v1beta"
         static let geminiModel = "gemini-2.5-flash"

@@ -90,10 +90,25 @@ final class AppRouter {
 
     func openPOI(_ placeId: UUID, in placeIds: [UUID]) {
         poiDetent = .height(340)
-        let normalizedIds = placeIds.contains(placeId) ? placeIds : [placeId] + placeIds
-        poiPlaceIds = normalizedIds
+        poiPlaceIds = normalizedPOIIds(placeId, in: placeIds)
         poiSelectedId = placeId
         presentedSheet = .poi
+    }
+
+    /// Opens the POI sheet from *another* sheet (e.g. search). Swaps
+    /// `presentedSheet` in place rather than dismissing first: `.sheet(item:)`
+    /// fires `onDismiss` on an identifier swap too, and that cleanup would race a
+    /// timed re-present and wipe the POI state before it appeared.
+    func openPOIFromSheet(_ placeId: UUID, in placeIds: [UUID]) {
+        poiDetent = .height(340)
+        poiPlaceIds = normalizedPOIIds(placeId, in: placeIds)
+        poiSelectedId = placeId
+        isSwappingSheet = true
+        presentedSheet = .poi
+    }
+
+    private func normalizedPOIIds(_ placeId: UUID, in placeIds: [UUID]) -> [UUID] {
+        placeIds.contains(placeId) ? placeIds : [placeId] + placeIds
     }
 
     func showToast(_ message: String) {

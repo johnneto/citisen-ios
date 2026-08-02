@@ -268,6 +268,113 @@ final class PlaceResolutionScorerTests: XCTestCase {
         )
         XCTAssertNil(PlaceResolutionScorer.pickBest([junk], context: lisbonContext))
     }
+
+    private var granadaContext: PlaceResolutionScorer.Context {
+        .init(
+            curatedName: "Alhambra",
+            cityCenter: CLLocationCoordinate2D(latitude: 37.177, longitude: -3.598),
+            cityRadiusMeters: 5_000
+        )
+    }
+
+    func test_ticketResellerLosesToTheLandmarkItself() throws {
+        // Google ranks the reseller first and it out-rates nothing — but its name
+        // contains the landmark's, so plain similarity would keep it.
+        let reseller = try candidate(
+            name: "Granada Spain Alhambra Tickets",
+            ratingCount: 900,
+            latitude: 37.177,
+            longitude: -3.598,
+            primaryType: "travel_agency",
+            types: ["travel_agency"]
+        )
+        let landmark = try candidate(
+            name: "La Alhambra",
+            ratingCount: 120_000,
+            latitude: 37.176,
+            longitude: -3.588,
+            primaryType: "tourist_attraction",
+            types: ["tourist_attraction"]
+        )
+
+        let choice = PlaceResolutionScorer.pickBest([reseller, landmark], context: granadaContext)
+        XCTAssertEqual(choice?.index, 1)
+        XCTAssertEqual(choice?.place.displayName?.text, "La Alhambra")
+    }
+
+    func test_onlyResellerCandidates_rejected() throws {
+        let reseller = try candidate(
+            name: "Alhambra Guided Tours & Tickets",
+            ratingCount: 400,
+            latitude: 37.177,
+            longitude: -3.598,
+            primaryType: "travel_agency",
+            types: ["travel_agency"]
+        )
+        XCTAssertNil(PlaceResolutionScorer.pickBest([reseller], context: granadaContext))
+    }
+
+    func test_curatedNameMayContainTourWord() throws {
+        // "Tour Eiffel" is the venue's own name — it must not flag itself.
+        let context = PlaceResolutionScorer.Context(
+            curatedName: "Tour Eiffel",
+            cityCenter: CLLocationCoordinate2D(latitude: 48.858, longitude: 2.294),
+            cityRadiusMeters: 5_000
+        )
+        let tower = try candidate(
+            name: "Tour Eiffel",
+            ratingCount: 300_000,
+            latitude: 48.858,
+            longitude: 2.294,
+            primaryType: "tourist_attraction",
+            types: ["tourist_attraction"]
+        )
+        XCTAssertEqual(PlaceResolutionScorer.pickBest([tower], context: context)?.index, 0)
+    }
+
+    func test_permanentlyClosedTopHitIsSkipped() throws {
+        let closed = try candidate(
+            name: "Cervejaria Ramiro",
+            ratingCount: 6_000,
+            businessStatus: "CLOSED_PERMANENTLY"
+        )
+        let open = try candidate(name: "Cervejaria Ramiro", ratingCount: 4_800)
+
+        let choice = PlaceResolutionScorer.pickBest([closed, open], context: lisbonContext)
+        XCTAssertEqual(choice?.index, 1)
+        XCTAssertEqual(choice?.place.businessStatus, "OPERATIONAL")
+    }
+
+    func test_allCandidatesPermanentlyClosed_rejected() throws {
+        let closed = try candidate(
+            name: "Cervejaria Ramiro",
+            ratingCount: 6_000,
+            businessStatus: "CLOSED_PERMANENTLY"
+        )
+        XCTAssertNil(PlaceResolutionScorer.pickBest([closed], context: lisbonContext))
+    }
+}
+
+final class PlaceLocaleTests: XCTestCase {
+    func test_languageFromCountryCode() {
+        XCTAssertEqual(PlaceLocale.languageCode(forCountryCode: "ES"), "es")
+        XCTAssertEqual(PlaceLocale.languageCode(forCountryCode: "pt"), "pt")
+        XCTAssertEqual(PlaceLocale.languageCode(forCountryCode: "JP"), "ja")
+        XCTAssertNil(PlaceLocale.languageCode(forCountryCode: nil))
+        XCTAssertNil(PlaceLocale.languageCode(forCountryCode: "ESP"))
+    }
+
+    func test_countryCodeRecoveredFromStableCityId() {
+        let id = City.stableId(name: "Granada", countryCode: "ES")
+        XCTAssertEqual(PlaceLocale.countryCode(fromCityId: id), "ES")
+        XCTAssertEqual(PlaceLocale.languageCode(forCityId: id), "es")
+    }
+
+    func test_legacyCityIdsStayUnlocalized() {
+        XCTAssertNil(PlaceLocale.countryCode(fromCityId: "lisbon"))
+        XCTAssertNil(PlaceLocale.countryCode(fromCityId: "dyn_current"))
+        XCTAssertNil(PlaceLocale.countryCode(fromCityId: "dyn_new_york"))
+    }
 }
 
 final class DetailsMappingTests: XCTestCase {

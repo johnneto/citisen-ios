@@ -25,20 +25,30 @@ enum PlaceResolutionScorer {
 
     static func pickBest(_ candidates: [PlaceV1], context: Context) -> Choice? {
         guard !candidates.isEmpty else { return nil }
-        let scored = candidates.enumerated().map { index, place in
-            Choice(
-                place: place,
-                index: index,
-                score: score(place, context: context),
-                nameSimilarity: nameSimilarity(context.curatedName, place.displayName?.text ?? "")
-            )
-        }
-        let first = scored[0]
+        // Permanently closed listings are never the right answer, even when they
+        // are Google's top hit — drop them so a live listing further down can win.
+        let scored = candidates.enumerated()
+            .filter { !isPermanentlyClosed($0.element) }
+            .map { index, place in
+                Choice(
+                    place: place,
+                    index: index,
+                    score: score(place, context: context),
+                    nameSimilarity: nameSimilarity(context.curatedName, place.displayName?.text ?? "")
+                )
+            }
+        guard let first = scored.first else { return nil }
         var chosen = scored.max(by: { $0.score < $1.score }) ?? first
-        // Anti-regression tie-break: only override Google's ranking when clearly better.
-        if chosen.index != 0, chosen.score - first.score < 0.10 {
+        // Anti-regression tie-break: only override Google's ranking when clearly
+        // better — unless Google's top hit is a reseller, which is never right.
+        if chosen.index != first.index,
+           chosen.score - first.score < 0.10,
+           !isResale(first.place, context: context) {
             chosen = first
         }
+        // Every candidate was a reseller: no pin beats a ticket desk wearing the
+        // landmark's name.
+        if isResale(chosen.place, context: context) { return nil }
         // Reject only hopeless matches: barely-overlapping name AND either no
         // ratings (dupe signature) or far outside the city.
         if chosen.nameSimilarity < 0.20 {
@@ -78,8 +88,39 @@ enum PlaceResolutionScorer {
                            && (place.types?.isEmpty ?? true)
                            && (place.userRatingCount ?? 0) == 0) ? 0.15 : 0.0
 
-        return 0.45 * sim + 0.30 * popularity + 0.15 * proximity + 0.10 * operational - dupePenalty
+        // Big enough to lose against any plausible real listing — resellers often
+        // out-rate the monument itself, so popularity alone cannot settle it.
+        let resalePenalty = isResale(place, context: context) ? 0.35 : 0.0
+
+        return 0.45 * sim + 0.30 * popularity + 0.15 * proximity + 0.10 * operational
+            - dupePenalty - resalePenalty
     }
+
+    static func isPermanentlyClosed(_ place: PlaceV1) -> Bool {
+        place.businessStatus == "CLOSED_PERMANENTLY"
+    }
+
+    /// Ticket resellers, tour desks and "skip the line" outfits pack the landmark's
+    /// name into their own ("Granada Spain Alhambra Tickets"), which reads as a
+    /// strong name match and can outrank the monument's own listing. Only words the
+    /// curated name did not itself ask for count, so "Tour Eiffel" never flags itself.
+    static func isResale(_ place: PlaceV1, context: Context) -> Bool {
+        let curated = tokens(context.curatedName)
+        let extra = tokens(place.displayName?.text ?? "").subtracting(curated)
+        if !extra.isDisjoint(with: resaleWords) { return true }
+        // A monument is not a travel agency; a stall selling entry to one is.
+        return curated.isDisjoint(with: resaleWords)
+            && !Set(place.types ?? []).isDisjoint(with: resaleTypes)
+    }
+
+    private static let resaleWords: Set<String> = [
+        "ticket", "tickets", "entrada", "entradas",
+        "biglietti", "billets", "billetes", "bilhetes",
+        "tour", "tours", "excursion", "excursions", "excursiones",
+        "guided", "sightseeing", "transfer", "transfers", "booking", "bookings"
+    ]
+
+    private static let resaleTypes: Set<String> = ["travel_agency", "tour_agency"]
 
     /// Diacritic- and case-folded token similarity: half Jaccard, half overlap
     /// coefficient — overlap gives credit when the official name is a superset

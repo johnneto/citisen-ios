@@ -54,6 +54,11 @@ final class MapViewModel {
 
     private var loadTask: Task<Void, Never>?
     private var hasCenteredOnUser: Bool = false
+    /// A Near Me tap that landed before any fix was available. Consumed by the
+    /// next `centerOnUserIfAvailable()`, so the tap still recentres instead of
+    /// being silently dropped.
+    @ObservationIgnored private var pendingRecenter: Bool = false
+    @ObservationIgnored private var pendingRecenterTask: Task<Void, Never>?
     @ObservationIgnored private var isAwaitingLocationCity: Bool = false
     @ObservationIgnored private var locationSuggestionTask: Task<Void, Never>?
 
@@ -206,13 +211,20 @@ final class MapViewModel {
                     span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
                 ))
                 cityService.updateFromCoordinate(coord)
+                beginLocationSuggestion()
             } else {
+                // No fix yet: remember the tap so the first one to land honours it.
+                // The suggestion window opens then too — opening it here would race
+                // a geocode that hasn't been requested for the new position.
                 locationService.startUpdating()
+                armPendingRecenter()
             }
-            beginLocationSuggestion()
             return true
         case .notDetermined:
+            // The grant restarts updates via `locationManagerDidChangeAuthorization`,
+            // and the first fix completes this tap.
             locationService.requestWhenInUse()
+            armPendingRecenter()
             return true
         case .denied, .restricted:
             return false
@@ -221,9 +233,30 @@ final class MapViewModel {
         }
     }
 
+    /// Holds a Near Me tap open for a short window. Past it the intent expires, so
+    /// a fix that only arrives minutes later can't yank the camera out from under
+    /// wherever the user has since panned.
+    private func armPendingRecenter() {
+        pendingRecenter = true
+        pendingRecenterTask?.cancel()
+        pendingRecenterTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.pendingRecenter = false
+        }
+    }
+
     func centerOnUserIfAvailable() {
-        guard !hasCenteredOnUser, let coord = locationService.currentLocation else { return }
+        guard let coord = locationService.currentLocation else { return }
+        let isFirstCentering = !hasCenteredOnUser
+        let wasRequested = pendingRecenter
+        guard isFirstCentering || wasRequested else { return }
+
         hasCenteredOnUser = true
+        pendingRecenter = false
+        pendingRecenterTask?.cancel()
+        pendingRecenterTask = nil
+
         cameraPosition = .region(MKCoordinateRegion(
             center: coord,
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
@@ -231,7 +264,12 @@ final class MapViewModel {
         cityService.updateFromCoordinate(coord)
         // Don't call loadInitial here — the citySelectionEpoch onChange in
         // MapScreen will call handleCityChange() once the geocode resolves.
-        applyCacheOrIdle()
+        if isFirstCentering {
+            applyCacheOrIdle()
+        }
+        if wasRequested {
+            beginLocationSuggestion()
+        }
     }
 
     func recenterOnCity() {

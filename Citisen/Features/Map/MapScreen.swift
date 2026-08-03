@@ -235,7 +235,6 @@ struct MapScreen: View {
                 Spacer()
                 NearMeFAB {
                     if !vm.recenterOnUser() {
-                        router.showToast("Enable location in Settings to use Near Me.")
                         vm.shouldShowLocationDeniedSettings = true
                     }
                 }
@@ -386,9 +385,17 @@ private struct NearMeFAB: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(BrandColor.sand)
                 .frame(width: 52, height: 52)
-                .liquidGlass(corner: 26, strength: .regular, interactive: true)
+                // `glassEffect()` draws but doesn't hit test, so without this the
+                // tappable area collapses to the glyph and edge taps fall through
+                // to the map's tap gesture.
+                .contentShape(Circle())
         }
-        .buttonStyle(.pressableScale)
+        // `scale: 1` keeps the press haptic without compositing a `scaleEffect`
+        // over the glass layer — scaling it rasterizes its rectangular backdrop,
+        // which flashes behind the circle on press. Interactive glass supplies
+        // its own press response.
+        .buttonStyle(PressableScaleStyle(scale: 1))
+        .liquidGlass(corner: 26, strength: .regular, interactive: true)
         .accessibilityLabel("Center on my location")
     }
 }

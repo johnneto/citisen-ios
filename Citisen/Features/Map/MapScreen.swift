@@ -390,12 +390,12 @@ private struct NearMeFAB: View {
                 // to the map's tap gesture.
                 .contentShape(Circle())
         }
-        // `scale: 1` keeps the press haptic without compositing a `scaleEffect`
-        // over the glass layer — scaling it rasterizes its rectangular backdrop,
-        // which flashes behind the circle on press. Interactive glass supplies
-        // its own press response.
-        .buttonStyle(PressableScaleStyle(scale: 1))
-        .liquidGlass(corner: 26, strength: .regular, interactive: true)
+        .buttonStyle(.pressableScale)
+        // Pill, not `corner: 26`: a fixed radius is only circular while the frame
+        // is exactly 52pt, and interactive glass grows its bounds on press — at
+        // which point 26pt reads as a rounded square around the button. `pill`
+        // clamps to a capsule, so it stays a circle at any size.
+        .liquidGlassPill(strength: .regular, interactive: true)
         .accessibilityLabel("Center on my location")
     }
 }
